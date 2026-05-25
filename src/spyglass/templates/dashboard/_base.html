@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ project }}{% endblock %} · Observability</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/dashboard/static/css/shared.css">
+  <link rel="stylesheet" href="/dashboard/static/css/components.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js" defer></script>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar" aria-label="Project navigation">
+  <div class="sidebar-brand">
+    <a class="sidebar-brand-link" href="/dashboard/">spyglass</a>
+    <button class="sidebar-collapse-btn" id="sidebarToggle" aria-label="Toggle sidebar" title="Toggle sidebar">‹</button>
+  </div>
+  <div class="sidebar-nav">
+    <span class="sidebar-section-label">Dashboards</span>
+    {% for p in projects %}
+    <a class="sidebar-link{% if p == project %} is-active{% endif %}" href="/dashboard/{{ p }}">{{ p }}</a>
+    {% endfor %}
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="header-row">
+    <div>
+      <p class="eyebrow">{{ project }}</p>
+      <h1>Observability</h1>
+    </div>
+    <div class="header-controls">
+      <label for="windowAmount" class="visually-hidden">Time window amount</label>
+      <input id="windowAmount" type="number" class="control-input" value="1" min="1" aria-label="Time window amount">
+      <label for="windowUnit" class="visually-hidden">Time window unit</label>
+      <select id="windowUnit" class="control-select" aria-label="Time window unit">
+        <option value="hours">hours</option>
+        <option value="days" selected>days</option>
+        <option value="weeks">weeks</option>
+      </select>
+      <label for="rollupWindow" class="visually-hidden">Rollup</label>
+      <select id="rollupWindow" class="control-select" aria-label="Rollup window">
+        <option value="1">1 min</option>
+        <option value="2">2 min</option>
+        <option value="5">5 min</option>
+        <option value="10">10 min</option>
+        <option value="15">15 min</option>
+        <option value="30">30 min</option>
+        <option value="60" selected>1 hr</option>
+        <option value="120">2 hr</option>
+        <option value="360">6 hr</option>
+        <option value="720">12 hr</option>
+        <option value="1440">1 day</option>
+      </select>
+      <button id="refreshBtn" type="button" class="btn">Refresh</button>
+      <span id="lastUpdated" class="last-updated"></span>
+    </div>
+  </div>
+</header>
+
+<main class="dashboard">
+
+  {% block sections %}{% endblock %}
+
+  <!-- Log section — identical across all projects -->
+  <section class="card card-full" aria-labelledby="logsHeading">
+    <div class="card-header-row">
+      <h2 id="logsHeading">Logs</h2>
+      <div class="view-toggle" role="group" aria-label="Log view">
+        <button id="logsViewBtn" type="button" class="btn is-active">Logs</button>
+        <button id="patternsViewBtn" type="button" class="btn">Patterns</button>
+      </div>
+    </div>
+
+    <div class="log-histogram-chart">
+      <canvas id="chartLogLevels" aria-label="Log count by level over time"></canvas>
+    </div>
+
+    <div class="logs-filter-bar">
+      <div class="filter-group">
+        <label for="logLevelFilter" class="filter-label">Level</label>
+        <select id="logLevelFilter" class="filter-select" aria-label="Log level filter">
+          <option value="">All levels</option>
+          <option value="DEBUG">DEBUG</option>
+          <option value="INFO">INFO</option>
+          <option value="WARNING">WARNING</option>
+          <option value="ERROR">ERROR</option>
+          <option value="CRITICAL">CRITICAL</option>
+        </select>
+      </div>
+      <div class="filter-group filter-group-grow">
+        <label for="logLoggerFilter" class="filter-label">Logger</label>
+        <input id="logLoggerFilter" type="search" class="filter-input" placeholder="logger name" autocomplete="off">
+      </div>
+      <div class="filter-group filter-group-grow">
+        <label for="logContentFilter" class="filter-label">Search</label>
+        <input id="logContentFilter" type="search" class="filter-input" placeholder="message content" autocomplete="off">
+      </div>
+    </div>
+
+    <div id="logsSection">
+      <p id="logsCount" class="logs-count">Showing 0 of 0 logs</p>
+      <div class="table-wrap">
+        <table class="data-table logs-table">
+          <thead>
+            <tr>
+              <th scope="col">Time</th>
+              <th scope="col">Level</th>
+              <th scope="col">Logger</th>
+              <th scope="col">Message</th>
+            </tr>
+          </thead>
+          <tbody id="logsTableBody">
+            <tr><td colspan="4" class="logs-empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="patternsSection" hidden>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Count</th>
+              <th scope="col">Pattern</th>
+            </tr>
+          </thead>
+          <tbody id="patternsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="/dashboard/static/js/dashboard-lib.js"></script>
+{% block script %}{% endblock %}
+<script>
+  (function () {
+    const sidebar = document.getElementById('sidebar');
+    const toggle  = document.getElementById('sidebarToggle');
+    const COLLAPSED = 'sidebar-collapsed';
+
+    function apply(collapsed) {
+      document.body.classList.toggle(COLLAPSED, collapsed);
+      toggle.textContent = collapsed ? '›' : '‹';
+      toggle.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    }
+
+    apply(localStorage.getItem('sidebarCollapsed') === '1');
+
+    toggle.addEventListener('click', () => {
+      const next = !document.body.classList.contains(COLLAPSED);
+      localStorage.setItem('sidebarCollapsed', next ? '1' : '0');
+      apply(next);
+    });
+  })();
+</script>
+
+</body>
+</html>

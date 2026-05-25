@@ -1,0 +1,13 @@
+[Unit]
+ Description=Lightweight metrics and log collection for small Python services.
+ After=multi-user.target
+
+ [Service]
+ WorkingDirectory=/home/mnalavadi/spyglass
+ Type=idle
+ ExecStart=/home/mnalavadi/.local/bin/uv run spyglass
+ User=mnalavadi
+
+ [Install]
+ WantedBy=multi-user.target
+ 

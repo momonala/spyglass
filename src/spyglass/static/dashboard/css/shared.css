@@ -1,0 +1,70 @@
+/* Spyglass design tokens — dark theme */
+
+:root {
+  /* Backgrounds — three-layer depth system */
+  --bg:             #111217;
+  --surface-raised: #1a1d23;
+  --surface-inset:  #0d0e11;
+  --fill:           rgba(255, 255, 255, 0.07);
+
+  /* Borders */
+  --separator:      rgba(255, 255, 255, 0.1);
+
+  /* Accent */
+  --accent:         #0a84ff;
+
+  /* Text */
+  --label:          rgba(255, 255, 255, 0.92);
+  --label-secondary: rgba(255, 255, 255, 0.55);
+  --label-tertiary:  rgba(255, 255, 255, 0.30);
+
+  /* Status */
+  --danger:       #ff453a;
+  --danger-soft:  rgba(255, 69, 58, 0.08);
+  --success:      #30d158;
+  --warning:      #ffd60a;
+
+  /* Interactive fills */
+  --fill-hover: rgba(255, 255, 255, 0.12);
+
+  /* Typography */
+  --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace,
+               "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+
+  /* Radii */
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+/* ── Reset ─────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--label);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Base table ─────────────────────────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 0.5px solid var(--separator);
+}
+
+th {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--label-tertiary);
+}

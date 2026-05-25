@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboards · Spyglass</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/dashboard/static/css/shared.css">
+  <link rel="stylesheet" href="/dashboard/static/css/components.css">
+  <style>
+    .index-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+      padding: 2rem;
+      max-width: 900px;
+    }
+    .project-link {
+      display: block;
+      padding: 1.25rem 1.5rem;
+      background: var(--surface-raised);
+      border: 0.5px solid var(--separator);
+      border-radius: var(--radius-lg);
+      color: var(--label);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .project-link:hover {
+      background: var(--fill-hover);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+<nav class="sidebar" aria-label="Project navigation">
+  <div class="sidebar-brand">
+    <a class="sidebar-brand-link" href="/dashboard/">spyglass</a>
+  </div>
+  <div class="sidebar-nav">
+    <span class="sidebar-section-label">Dashboards</span>
+    {% for project in projects %}
+    <a class="sidebar-link" href="/dashboard/{{ project }}">{{ project }}</a>
+    {% endfor %}
+  </div>
+</nav>
+<header class="page-header">
+  <div class="header-row">
+    <div>
+      <p class="eyebrow">spyglass</p>
+      <h1>Dashboards</h1>
+    </div>
+  </div>
+</header>
+<main>
+  <div class="index-grid">
+    {% for project in projects %}
+    <a class="project-link" href="/dashboard/{{ project }}">{{ project }}</a>
+    {% endfor %}
+  </div>
+</main>
+</body>
+</html>

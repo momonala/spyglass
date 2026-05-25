@@ -1,0 +1,132 @@
+{% extends "dashboard/_base.html" %}
+
+{% block title %}trainspotter{% endblock %}
+
+{% block sections %}
+
+  <div class="card-full ts-top-row">
+
+    <div class="chart-card">
+      <h3 class="chart-title">API latency (ms)</h3>
+      <canvas id="chartLatency" aria-label="API request latency over time"></canvas>
+    </div>
+
+    <section class="card" aria-labelledby="displayHeading">
+      <div class="card-header">
+        <h2 id="displayHeading">Display (iPad)</h2>
+        <p class="card-subtitle">Raw outcome counts in window</p>
+      </div>
+      <div class="stat-grid">
+        <div class="stat">
+          <span class="stat-label">Fresh</span>
+          <span id="stat-fresh" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Stale (fallback)</span>
+          <span id="stat-fallback" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">No snapshot</span>
+          <span id="stat-no-snapshot" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">502 errors</span>
+          <span id="stat-failed" class="stat-value">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="vbbHeading">
+      <div class="card-header">
+        <h2 id="vbbHeading">VBB dependency</h2>
+        <p class="card-subtitle">Upstream API health</p>
+      </div>
+      <div class="stat-grid">
+        <div class="stat">
+          <span class="stat-label">Errors</span>
+          <span id="stat-vbb-errors" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Cache hits</span>
+          <span id="stat-cache-hits" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Cache misses</span>
+          <span id="stat-cache-misses" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Fetch avg</span>
+          <span id="stat-vbb-avg" class="stat-value">—</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <section class="card card-full" aria-labelledby="vbbErrorsHeading">
+    <div class="card-header">
+      <h2 id="vbbErrorsHeading">VBB errors</h2>
+    </div>
+    <div class="chart-card chart-card--inset">
+      <canvas id="chartVbbHealth" aria-label="VBB errors over time"></canvas>
+    </div>
+  </section>
+
+{% endblock %}
+
+{% block script %}
+<script>
+// Metric naming: {project}.{caller_function}.{stat}
+// Context manager timings (__enter__) and direct function calls produce different prefixes.
+// Verify names against /dashboard/api/metrics/names?project=trainspotter if charts are empty.
+const PROJECT = "trainspotter";
+const M = {
+  // @metrics.timed("stations") decorator on api_stations → __enter__ caller
+  stationsLatency:  `${PROJECT}.__enter__.stations`,
+  // @metrics.timed("display_data") decorator on api_display_data → __enter__ caller
+  displayLatency:   `${PROJECT}.__enter__.display_data`,
+  // with metrics.timed("vbb.fetch"): inside _fetch_departures_from_vbb
+  vbbFetch:    `${PROJECT}._fetch_departures_from_vbb.vbb.fetch`,
+  vbbError:    `${PROJECT}._fetch_departures_from_vbb.vbb.error`,
+  cacheHit:    `${PROJECT}.get_inbound_trains_cached.vbb.cache_hit`,
+  cacheMiss:   `${PROJECT}.get_inbound_trains_cached.vbb.cache_miss`,
+  // counters inside _fetch_display_departures
+  displayFresh:      `${PROJECT}._fetch_display_departures.display.fresh`,
+  displayFallback:   `${PROJECT}._fetch_display_departures.display.fallback`,
+  displayNoSnapshot: `${PROJECT}._fetch_display_departures.display.no_snapshot`,
+  // counter inside api_display_data
+  display502: `${PROJECT}.api_display_data.response.502`,
+};
+
+initDashboard({
+  project: PROJECT,
+  loadFn: async (win, signal) => {
+    await Promise.allSettled([
+      buildLineChart("chartLatency", PROJECT, [
+        { label: "stations (ms)",     metricName: M.stationsLatency, color: COLORS.accent },
+        { label: "display_data (ms)", metricName: M.displayLatency,  color: COLORS.purple },
+      ], win, signal),
+
+      buildBarChart("chartVbbHealth", PROJECT, M.vbbError, COLORS.danger, "VBB errors", win, signal),
+
+      fillStats(PROJECT, [
+        { elementId: "stat-fresh",       metricName: M.displayFresh,      pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-fallback",    metricName: M.displayFallback,   pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-no-snapshot", metricName: M.displayNoSnapshot, pick: (s) => s.sum, format: "count",
+          danger: (s) => (s.sum ?? 0) > 0 },
+        { elementId: "stat-failed",      metricName: M.display502,        pick: (s) => s.sum, format: "count",
+          danger: (s) => (s.sum ?? 0) > 0 },
+      ], win, signal),
+
+      fillStats(PROJECT, [
+        { elementId: "stat-vbb-errors",   metricName: M.vbbError,  pick: (s) => s.sum, format: "count",
+          danger: (s) => (s.sum ?? 0) > 0 },
+        { elementId: "stat-cache-hits",   metricName: M.cacheHit,  pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-cache-misses", metricName: M.cacheMiss, pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-vbb-avg",      metricName: M.vbbFetch,  pick: (s) => s.avg, format: "ms" },
+      ], win, signal),
+    ]);
+  },
+});
+</script>
+{% endblock %}
