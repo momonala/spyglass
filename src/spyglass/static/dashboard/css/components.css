@@ -1,0 +1,297 @@
+/**
+ * Spyglass component library.
+ *
+ * Generic, reusable UI building blocks. Requires shared.css to be loaded first.
+ * These classes are stable contracts — consumers should use them directly.
+ *
+ * Contents:
+ *   Base reset
+ *   .card
+ *   .stat-grid / .stat
+ *   .level-badge
+ *   .btn
+ *   .field
+ *   .status-banner
+ *   .empty-state
+ *   .table-wrap / .data-table
+ */
+
+/* ── Base reset ──────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--label);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+h1, h2, h3, h4, p { margin: 0; }
+button, select, input { font: inherit; }
+
+
+/* ── Card ────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius-xl);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--label);
+}
+
+.card-subtitle {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--label-tertiary);
+}
+
+
+/* ── Stat grid ───────────────────────────────────────────────────── */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stat {
+  background: var(--surface-raised);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.stat-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--label-tertiary);
+  margin-bottom: 6px;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--label);
+}
+
+.stat-healthy { color: var(--success); }
+.stat-warn    { color: var(--warning); }
+.stat-danger  { color: var(--danger); }
+
+
+/* ── Level badge ─────────────────────────────────────────────────── */
+
+.level-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.level-debug    { color: var(--label-secondary); background: var(--fill); }
+.level-info     { color: #409cff; background: rgba(10, 132, 255, 0.15); }
+.level-warning  { color: var(--warning); background: rgba(255, 214, 10, 0.15); }
+.level-error    { color: var(--danger); background: var(--danger-soft); }
+.level-critical {
+  color: #ff6961;
+  background: rgba(255, 69, 58, 0.22);
+  border: 0.5px solid rgba(255, 69, 58, 0.45);
+}
+
+
+/* ── Button ──────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  color: var(--label);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.1px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, transform 0.08s;
+}
+
+.btn:hover  { background: var(--fill-hover); }
+.btn:active { transform: scale(0.97); }
+
+.btn--primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn--primary:hover {
+  background: #409cff;
+  border-color: transparent;
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.btn--ghost:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+
+/* ── Field (labeled form control) ────────────────────────────────── */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field > span,
+.field > label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--label-tertiary);
+}
+
+.field select,
+.field input {
+  min-width: 160px;
+  padding: 7px 28px 7px 10px;
+  background: var(--fill);
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius-sm);
+  color: var(--label);
+  font-size: 14px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.15s, background 0.15s;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='rgba(235,235,245,0.35)' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.field input[type="text"],
+.field input[type="number"],
+.field input[type="search"] {
+  background-image: none;
+  padding-right: 10px;
+}
+
+.field select:focus,
+.field input:focus {
+  border-color: var(--accent);
+  background-color: var(--fill-hover);
+}
+
+
+/* ── Status banner ───────────────────────────────────────────────── */
+
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--label-secondary);
+  font-size: 13px;
+}
+
+.status-banner--error {
+  border-color: rgba(255, 69, 58, 0.4);
+  background: var(--danger-soft);
+  color: #ff6961;
+}
+
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+
+.empty-state {
+  margin-top: 80px;
+  text-align: center;
+  color: var(--label-tertiary);
+  font-size: 15px;
+}
+
+.empty-state[hidden] { display: none; }
+
+
+/* ── Table ───────────────────────────────────────────────────────── */
+
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 12px;
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--separator);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.data-table th,
+.data-table td {
+  padding: 9px 12px;
+  border-bottom: 0.5px solid var(--separator);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table thead tr:last-child th { border-bottom-color: var(--separator-opaque); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+.data-table th {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--label-tertiary);
+  white-space: nowrap;
+  background: var(--surface-raised);
+}

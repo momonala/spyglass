@@ -1,0 +1,4 @@
+"""Stub values for CI/testing - copy to src/values.py for local development."""
+
+TELEGRAM_API_TOKEN = "ci-telegram-token"
+ = "ci-db-password"

@@ -1,0 +1,234 @@
+/**
+ * Spyglass dashboard layout.
+ *
+ * Spyglass-internal styles only: toolbar, widget grid, widget cards, modal,
+ * and chart overrides. Requires shared.css + components.css to load first.
+ * Do not import this file from other apps — use components.css instead.
+ */
+
+/* ── Toolbar ─────────────────────────────────────────────────────── */
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: rgba(28, 28, 30, 0.72);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.toolbar__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.toolbar__brand h1 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.toolbar__subtitle {
+  font-size: 13px;
+  color: var(--label-secondary);
+}
+
+.toolbar__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+
+/* ── Main ────────────────────────────────────────────────────────── */
+
+main {
+  padding: 24px 20px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+
+/* ── Widget grid ─────────────────────────────────────────────────── */
+
+.widget-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 720px) {
+  .widget-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1280px) {
+  .widget-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.widget-grid:not(:empty) + .empty-state { display: none; }
+
+
+/* ── Widget card ─────────────────────────────────────────────────── */
+
+.widget-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+  padding: 16px;
+  background: var(--surface);
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.widget-card:hover {
+  border-color: var(--separator-opaque);
+  box-shadow: var(--shadow-md);
+}
+
+.widget-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.widget-card__title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.widget-card__meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.widget-card__remove {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--label-tertiary);
+  font-size: 17px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.widget-card__remove:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.widget-card__body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.widget-card__body--chart {
+  align-items: stretch;
+  min-height: 200px;
+}
+
+.widget-card__status {
+  font-size: 13px;
+  color: var(--label-tertiary);
+}
+
+.widget-card__status--error { color: #ff6961; }
+
+
+/* ── Counter widget ──────────────────────────────────────────────── */
+
+.counter-value {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -2px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(135deg, #fff 40%, rgba(235, 235, 245, 0.5));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.counter-label {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--label-tertiary);
+}
+
+
+/* ── Add-widget modal ────────────────────────────────────────────── */
+
+.modal {
+  width: min(380px, calc(100vw - 32px));
+  padding: 0;
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  color: var(--label);
+  box-shadow: var(--shadow-lg);
+}
+
+.modal::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.modal__header h2 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--separator);
+}
+
+
+/* ── uPlot overrides ─────────────────────────────────────────────── */
+
+.uplot { font-family: var(--font-sans); }
+.uplot .u-title { display: none; }
+.uplot .u-legend { font-size: 12px; color: var(--label-secondary); }
