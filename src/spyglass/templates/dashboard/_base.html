@@ -13,6 +13,11 @@
 </head>
 <body>
 
+<video class="bg-video" autoplay loop muted playsinline
+       oncanplay="this.playbackRate=0.5">
+  <source src="/dashboard/static/abstract-background.webm" type="video/webm">
+</video>
+
 <nav class="sidebar" id="sidebar" aria-label="Project navigation">
   <div class="sidebar-brand">
     <a class="sidebar-brand-link" href="/dashboard/">spyglass</a>
@@ -145,9 +150,15 @@
     const toggle  = document.getElementById('sidebarToggle');
     const COLLAPSED = 'sidebar-collapsed';
 
+    function chevron(collapsed) {
+      return collapsed
+        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
+        : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+    }
+
     function apply(collapsed) {
       document.body.classList.toggle(COLLAPSED, collapsed);
-      toggle.textContent = collapsed ? '›' : '‹';
+      toggle.innerHTML = chevron(collapsed);
       toggle.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
     }
 

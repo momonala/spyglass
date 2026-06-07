@@ -52,10 +52,7 @@ def _aggregate_expr(metric_type: str) -> Any:
 
 def list_projects(store: ProjectStore) -> list[dict]:
     """Return project slugs with optional display names from settings.json."""
-    return [
-        {"slug": slug, "project": store.get_project_name(slug)}
-        for slug in sorted(store.all_slugs())
-    ]
+    return [{"slug": slug, "project": store.get_project_name(slug)} for slug in sorted(store.all_slugs())]
 
 
 def list_metric_names(store: ProjectStore, project: str) -> list[dict]:

@@ -16,10 +16,18 @@ from sqlalchemy import Engine
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from spyglass.db.models import LogsBase
-from spyglass.db.models import MetricsBase
+from alembic.command import upgrade as alembic_upgrade
+from alembic.config import Config as AlembicConfig
+
+_ALEMBIC_INI = Path(__file__).parent.parent.parent.parent / "alembic.ini"
 
 DEFAULT_RETENTION_DAYS = 30
+
+
+def _run_migrations(db_path: Path, branch: str) -> None:
+    cfg = AlembicConfig(str(_ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    alembic_upgrade(cfg, f"{branch}@head")
 
 
 def slugify(name: str) -> str:
@@ -130,11 +138,14 @@ class ProjectStore:
             project_dir = self._data_dir / slug
             project_dir.mkdir(parents=True, exist_ok=True)
 
-            metrics_engine = create_engine(f"sqlite:///{project_dir / 'metrics.db'}")
-            logs_engine = create_engine(f"sqlite:///{project_dir / 'logs.db'}")
+            metrics_db = project_dir / "metrics.db"
+            logs_db = project_dir / "logs.db"
 
-            MetricsBase.metadata.create_all(metrics_engine)
-            LogsBase.metadata.create_all(logs_engine)
+            _run_migrations(metrics_db, "metrics")
+            _run_migrations(logs_db, "logs")
+
+            metrics_engine = create_engine(f"sqlite:///{metrics_db}")
+            logs_engine = create_engine(f"sqlite:///{logs_db}")
 
             self._engines[slug] = (metrics_engine, logs_engine)
 

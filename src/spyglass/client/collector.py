@@ -94,7 +94,9 @@ class MetricsCollector:
         self._emit(MetricType.SET, stat, value, tags, prefix)
 
     @contextmanager
-    def timed(self, stat: str, *, tags: dict | None = None, prefix: bool = True) -> Generator[None, None, None]:
+    def timed(
+        self, stat: str, *, tags: dict | None = None, prefix: bool = True
+    ) -> Generator[None, None, None]:
         """Context manager that measures elapsed time and emits a timing metric.
 
         Args:

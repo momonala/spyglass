@@ -7,6 +7,7 @@ from datetime import timezone
 import pytest
 
 from spyglass.client.query import SpyglassQueryClient
+from spyglass.dashboard.aggregate import DEFAULT_ROLLUP
 from spyglass.dashboard.aggregate import TimeWindow
 from spyglass.dashboard.aggregate import build_log_histogram
 from spyglass.dashboard.aggregate import compute_state_uptime
@@ -96,7 +97,10 @@ def test_window_hours_from(amount, unit, expected):
     assert window_hours_from(amount, unit) == expected
 
 
-@pytest.mark.parametrize("rollup,expected", [("auto", "auto"), ("15", "15"), ("bad", "10"), (None, "10")])
+@pytest.mark.parametrize(
+    "rollup,expected",
+    [("auto", "auto"), ("15", "15"), ("bad", DEFAULT_ROLLUP), (None, DEFAULT_ROLLUP)],
+)
 def test_parse_rollup(rollup, expected):
     assert parse_rollup(rollup) == expected
 
@@ -395,7 +399,7 @@ def test_summary_builder_counters_and_timings():
         charts=_CHARTS,
         states=["healthy", "degraded", "unknown"],
     )
-    result = builder.build(_APP_A_METRICS, [], window_amount=1, window_unit="hours", rollup="auto", _now=NOW)
+    result = builder.build(_APP_A_METRICS, [], window_amount=1, window_unit="hours", rollup="auto", now=NOW)
 
     assert result.counters["requests"] == 15.0
     assert result.timings["latency"].count == 3
@@ -409,7 +413,7 @@ def test_summary_builder_counters_and_timings():
 
 def test_summary_builder_window_info():
     builder = SummaryBuilder(selectors=_SELECTORS, state_rules=[], charts=[], states=[])
-    result = builder.build([], [], window_amount=6, window_unit="hours", rollup="15", _now=NOW)
+    result = builder.build([], [], window_amount=6, window_unit="hours", rollup="15", now=NOW)
     assert result.window.amount == 6
     assert result.window.unit == "hours"
     assert result.window.hours == 6
@@ -419,7 +423,7 @@ def test_summary_builder_window_info():
 def test_summary_builder_log_histogram():
     builder = SummaryBuilder(selectors=_SELECTORS, state_rules=[], charts=[], states=[])
     logs = [{"timestamp": "2026-05-27T11:50:00Z", "level": "INFO", "logger_name": "a", "message": "hi"}]
-    result = builder.build([], logs, window_amount=1, window_unit="hours", rollup="5", _now=NOW)
+    result = builder.build([], logs, window_amount=1, window_unit="hours", rollup="5", now=NOW)
     assert result.log_histogram is not None
     assert "INFO" in result.log_histogram.by_level
 
