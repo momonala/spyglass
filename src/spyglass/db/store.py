@@ -41,6 +41,7 @@ class ProjectStore:
     def __init__(self, data_dir: Path) -> None:
         self._data_dir = data_dir
         self._engines: dict[str, tuple[Engine, Engine]] = {}
+        self._settings_cache: dict[str, dict] = {}
 
     def get_slug(self, project: str) -> str:
         """Resolve slug and lazily initialize the project's DB files."""
@@ -77,17 +78,32 @@ class ProjectStore:
             settings = {"project": project}
         settings["retention_days"] = retention_days
         settings_path.write_text(json.dumps(settings, indent=2))
+        self._settings_cache[slug] = settings
 
         self._ensure_engines(slug)
         return slug
 
     def get_retention_days(self, slug: str) -> int:
         """Read retention_days from the project's settings.json, or return the default."""
+        if slug in self._settings_cache:
+            return int(self._settings_cache[slug].get("retention_days", DEFAULT_RETENTION_DAYS))
         settings_path = self._data_dir / slug / "settings.json"
         if not settings_path.exists():
             return DEFAULT_RETENTION_DAYS
         settings = json.loads(settings_path.read_text())
+        self._settings_cache[slug] = settings
         return int(settings.get("retention_days", DEFAULT_RETENTION_DAYS))
+
+    def get_project_name(self, slug: str) -> str:
+        """Return the human-readable project name for a slug, falling back to the slug."""
+        if slug in self._settings_cache:
+            return self._settings_cache[slug].get("project", slug)
+        settings_path = self._data_dir / slug / "settings.json"
+        if not settings_path.exists():
+            return slug
+        settings = json.loads(settings_path.read_text())
+        self._settings_cache[slug] = settings
+        return settings.get("project", slug)
 
     def metrics_session(self, slug: str) -> Session:
         """Return a new SQLAlchemy Session bound to this project's metrics.db."""
@@ -114,8 +130,8 @@ class ProjectStore:
             project_dir = self._data_dir / slug
             project_dir.mkdir(parents=True, exist_ok=True)
 
-            metrics_engine = create_engine(f"sqlite:///{project_dir}/metrics.db")
-            logs_engine = create_engine(f"sqlite:///{project_dir}/logs.db")
+            metrics_engine = create_engine(f"sqlite:///{project_dir / 'metrics.db'}")
+            logs_engine = create_engine(f"sqlite:///{project_dir / 'logs.db'}")
 
             MetricsBase.metadata.create_all(metrics_engine)
             LogsBase.metadata.create_all(logs_engine)

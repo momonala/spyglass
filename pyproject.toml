@@ -12,10 +12,14 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     "requests>=2.31.0",
     "schedule>=1.2.0",
+    "pydantic>=2.13.4",
+]
+
+[dependency-groups]
+dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.14.10",
-    "pydantic>=2.13.4",
     "black>=26.5.1",
 ]
 
@@ -63,6 +67,9 @@ pythonpath = ["."]
 [tool.coverage.run]
 omit = ["tests/*", "*/test_*.py"]
 
+[tool.uv]
+exclude-newer = "1 week"
+
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
@@ -73,5 +80,3 @@ exclude_lines = [
     "if TYPE_CHECKING:",
 ]
 
-[tool.uv]
-exclude-newer = "1 week"

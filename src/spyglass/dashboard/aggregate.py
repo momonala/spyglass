@@ -24,6 +24,7 @@ DEFAULT_ROLLUP: str = "2"  # minutes; "auto" is also accepted
 
 _VALID_UNITS = ("hours", "days", "weeks", "months")
 _VALID_ROLLUPS = ("auto", "1", "2", "5", "10", "15", "30", "60", "120", "360", "720", "1440")
+_ROLLUP_CANDIDATES = (1, 2, 5, 10, 15, 30, 60, 120, 360, 720, 1440)
 _LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 # Matches the Spyglass log format: "<date> <time> <LEVEL> [<func>] <logger> <msg>"
@@ -42,7 +43,7 @@ class TimeWindow:
         self.bucket_minutes = bucket_minutes
 
     @classmethod
-    def from_hours(cls, window_hours: int, now: datetime, rollup_minutes: int) -> "TimeWindow":
+    def from_hours(cls, window_hours: int, now: datetime, rollup_minutes: int) -> TimeWindow:
         end = now.replace(tzinfo=None) if now.tzinfo else now
         start = end - timedelta(hours=window_hours)
         return cls(start=start, end=end, bucket_minutes=rollup_minutes)
@@ -94,9 +95,11 @@ def parse_window_unit(unit: str | None) -> str:
 
 
 def parse_rollup(rollup: str | None) -> str:
-    if str(rollup) in _VALID_ROLLUPS:
-        return str(rollup)
-    return "10"
+    if rollup is None:
+        return DEFAULT_ROLLUP
+    if rollup in _VALID_ROLLUPS:
+        return rollup
+    return DEFAULT_ROLLUP
 
 
 _MAX_HOURS = 8640  # 360 days
@@ -120,10 +123,10 @@ _TARGET_BUCKETS = 24
 def resolve_rollup_minutes(rollup: str, window_hours: int) -> int:
     if rollup == "auto":
         target_minutes = (window_hours * 60) / _TARGET_BUCKETS
-        for candidate in (1, 2, 5, 10, 15, 30, 60, 120, 360, 720, 1440):
+        for candidate in _ROLLUP_CANDIDATES:
             if candidate >= target_minutes:
                 return candidate
-        return 1440
+        return _ROLLUP_CANDIDATES[-1]
     return int(rollup)
 
 
@@ -144,14 +147,10 @@ def match_points(
     """Filter metric points by name suffix, optional type, and optional tags."""
     result = []
     for point in metrics:
-        if not point["name"].endswith(suffix):
-            continue
         if metric_type and point.get("metric_type") != metric_type:
             continue
-        if tags:
-            point_tags = point.get("tags") or {}
-            if not all(point_tags.get(k) == v for k, v in tags.items()):
-                continue
+        if not _metric_matches(point, suffix, tags):
+            continue
         result.append(point)
     return result
 
@@ -192,11 +191,11 @@ def timing_summary(metrics: list[dict], suffix: str, tags: dict | None = None) -
     )
 
 
-def latest_gauge(metrics: list[dict], suffix: str) -> float | None:
+def latest_gauge(metrics: list[dict], suffix: str, tags: dict | None = None) -> float | None:
     candidates = [
         (parse_metric_time(p["timestamp"]), p["value"])
         for p in metrics
-        if p.get("metric_type") == "gauge" and p["name"].endswith(suffix)
+        if p.get("metric_type") == "gauge" and _metric_matches(p, suffix, tags)
     ]
     if not candidates:
         return None

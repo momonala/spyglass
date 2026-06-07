@@ -25,9 +25,31 @@
   --warning:      #ffd60a;
 
   /* Interactive fills */
-  --fill-hover: rgba(255, 255, 255, 0.12);
+  --fill-hover:   rgba(255, 255, 255, 0.12);
+  --fill-active:  rgba(255, 255, 255, 0.16);
+
+  /* Translucent surface (e.g. sticky header backdrop) */
+  --bg-translucent: rgba(17, 18, 23, 0.88);
+
+  /* Sidebar dimensions */
+  --sidebar-width:           200px;
+  --sidebar-collapsed-width: 40px;
+
+  /* Chart heights */
+  --chart-height: 180px;
+
+  /* Danger text (softer than --danger for body copy) */
+  --danger-text: #ff6961;
+
+  /* Syntax highlight palette */
+  --syntax-link:    #409cff;
+  --syntax-keyword: #cf8ef4;
+  --syntax-builtin: #79c0ff;
+  --syntax-string:  #a5d6a7;
+  --syntax-number:  #ffa657;
 
   /* Typography */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace,
                "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
 
@@ -48,23 +70,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Base table ─────────────────────────────────────────── */
+/* ── Base table reset (minimal — full styles live on .data-table) ── */
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th, td {
-  padding: 6px 10px;
-  text-align: left;
-  border-bottom: 0.5px solid var(--separator);
-}
-
-th {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--label-tertiary);
-}
+table { border-collapse: collapse; }

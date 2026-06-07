@@ -2,6 +2,7 @@
 
 import tomllib
 from dataclasses import dataclass
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 
 _PYPROJECT = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
@@ -13,6 +14,8 @@ class SpyglassConfig:
     host: str = "0.0.0.0"
     port: int = 5013
     retention_days: int = 30
+    project_name: str = ""
+    project_version: str = ""
 
 
 def load_config() -> SpyglassConfig:
@@ -20,11 +23,12 @@ def load_config() -> SpyglassConfig:
     with _PYPROJECT.open("rb") as f:
         raw = tomllib.load(f)
     c = raw.get("tool", {}).get("config", {})
+    p = raw.get("project", {})
+    field_names = {f.name for f in dataclass_fields(SpyglassConfig)}
     return SpyglassConfig(
-        data_dir=c.get("data_dir", "data"),
-        host=c.get("host", "0.0.0.0"),
-        port=int(c.get("port", 5013)),
-        retention_days=int(c.get("retention_days", 30)),
+        **{k: v for k, v in c.items() if k in field_names},
+        project_name=p.get("name", ""),
+        project_version=p.get("version", ""),
     )
 
 

@@ -1,5 +1,6 @@
 """Dashboard site blueprint: static UI and dashboard-specific JSON API."""
 
+import os
 import re
 
 from flask import Blueprint
@@ -9,6 +10,7 @@ from flask import jsonify
 from flask import redirect
 from flask import render_template
 from flask import request
+from jinja2 import TemplateNotFound
 
 from spyglass.db.store import ProjectStore
 from spyglass.server import dashboard_queries
@@ -25,6 +27,8 @@ site = Blueprint(
 
 _VALID_PROJECT = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
+_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "../templates/dashboard")
+
 
 def _store() -> ProjectStore:
     return current_app.config["STORE"]
@@ -37,24 +41,24 @@ def _require_project() -> str:
     return project
 
 
-def _parse_window() -> tuple:
+def _parse_window() -> tuple[object, object]:
     from_ts, to_ts = parse_time_range(request.args.get("from"), request.args.get("to"))
     if from_ts >= to_ts:
         abort(400, "from must be before to")
     return from_ts, to_ts
 
 
-@site.get("/dashboard/")
-def dashboard_index():
-    import os
-
-    template_dir = os.path.join(os.path.dirname(__file__), "../templates/dashboard")
-    projects = sorted(
+def _list_project_templates() -> list[str]:
+    return sorted(
         os.path.splitext(f)[0]
-        for f in os.listdir(template_dir)
+        for f in os.listdir(_TEMPLATE_DIR)
         if f.endswith(".html") and not f.startswith("_") and f != "index.html"
     )
-    return render_template("dashboard/index.html", projects=projects)
+
+
+@site.get("/dashboard/")
+def dashboard_index():
+    return render_template("dashboard/index.html", projects=_list_project_templates())
 
 
 @site.get("/")
@@ -66,18 +70,12 @@ def root_redirect():
 def project_dashboard(project: str):
     if not _VALID_PROJECT.match(project):
         abort(400, f"invalid project name: {project!r}")
-    from jinja2 import TemplateNotFound
-
     try:
-        import os
-
-        template_dir = os.path.join(os.path.dirname(__file__), "../templates/dashboard")
-        projects = sorted(
-            os.path.splitext(f)[0]
-            for f in os.listdir(template_dir)
-            if f.endswith(".html") and not f.startswith("_") and f != "index.html"
+        return render_template(
+            f"dashboard/{project}.html",
+            project=project,
+            projects=_list_project_templates(),
         )
-        return render_template(f"dashboard/{project}.html", project=project, projects=projects)
     except TemplateNotFound:
         abort(404, f"no dashboard configured for project {project!r}")
 
@@ -101,7 +99,13 @@ def dashboard_metric_series():
         abort(400, "name is required")
     from_ts, to_ts = _parse_window()
     raw_interval = request.args.get("interval")
-    interval_seconds = int(raw_interval) if raw_interval else None
+    if raw_interval:
+        try:
+            interval_seconds = int(raw_interval)
+        except ValueError:
+            abort(400, "interval must be an integer")
+    else:
+        interval_seconds = None
     return jsonify(
         dashboard_queries.query_metric_series(_store(), project, name, from_ts, to_ts, interval_seconds)
     )

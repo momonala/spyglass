@@ -31,7 +31,7 @@ def serve(
 
     flask_app = create_app(store)
     typer.echo(f"Spyglass listening on http://{_host}:{_port}")
-    flask_app.run(host=_host, port=_port, debug=True)
+    flask_app.run(host=_host, port=_port, debug=False)
 
 
 def main() -> None:

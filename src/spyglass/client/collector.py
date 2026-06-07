@@ -3,22 +3,20 @@
 import inspect
 import logging
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from datetime import timezone
 
+import requests
+
+from spyglass.client.http_client import _normalize_host
 from spyglass.client.http_client import create_session
 from spyglass.db.models import MetricType
 
 _log = logging.getLogger(__name__)
 
 SPYGLASS_PACKAGE = "spyglass"
-
-
-def _normalize_host(host: str) -> str:
-    if host.startswith(("http://", "https://")):
-        return host
-    return f"http://{host}"
 
 
 def _caller_function() -> str:
@@ -96,7 +94,7 @@ class MetricsCollector:
         self._emit(MetricType.SET, stat, value, tags, prefix)
 
     @contextmanager
-    def timed(self, stat: str, *, tags: dict | None = None, prefix: bool = True):
+    def timed(self, stat: str, *, tags: dict | None = None, prefix: bool = True) -> Generator[None, None, None]:
         """Context manager that measures elapsed time and emits a timing metric.
 
         Args:
@@ -115,8 +113,11 @@ class MetricsCollector:
             yield
         finally:
             elapsed_ms = (time.perf_counter() - start) * 1000
-            name = f"{self.project}.{caller}.{stat}" if prefix else stat
+            name = self._build_name(caller, stat, prefix)
             self._send_point(MetricType.TIMING, name, elapsed_ms, tags)
+
+    def _build_name(self, caller: str, stat: str, prefix: bool) -> str:
+        return f"{self.project}.{caller}.{stat}" if prefix else stat
 
     def _emit(
         self,
@@ -127,11 +128,12 @@ class MetricsCollector:
         prefix: bool,
     ) -> None:
         caller = _caller_function()
-        name = f"{self.project}.{caller}.{stat}" if prefix else stat
+        name = self._build_name(caller, stat, prefix)
         self._send_point(metric_type, name, value, tags)
 
     def _send_point(self, metric_type: MetricType, name: str, value: float, tags: dict | None) -> None:
-        merged_tags = {**self._tags, **(tags or {})} or None
+        merged = {**self._tags, **(tags or {})}
+        merged_tags = merged or None
         payload = {
             "project": self.project,
             "points": [
@@ -146,7 +148,7 @@ class MetricsCollector:
         }
         try:
             self._session.post(f"{self._host}/metrics", json=payload, timeout=self._timeout)
-        except Exception as exc:
+        except requests.RequestException as exc:
             _log.debug("spyglass metric emit failed: %s", exc)
 
     def _register(self, retention_days: int) -> None:
@@ -156,5 +158,5 @@ class MetricsCollector:
                 json={"project": self.project, "retention_days": retention_days},
                 timeout=self._timeout,
             )
-        except Exception as exc:
+        except requests.RequestException as exc:
             _log.debug("spyglass project registration failed: %s", exc)

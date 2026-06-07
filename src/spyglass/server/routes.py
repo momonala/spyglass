@@ -4,13 +4,16 @@ import json
 import logging
 
 from flask import Blueprint
+from flask import Response
 from flask import current_app
 from flask import jsonify
 from flask import request
+from sqlalchemy import select
 
 from spyglass.db.models import LogEntry
 from spyglass.db.models import MetricPoint
 from spyglass.db.models import MetricType
+from spyglass.db.store import DEFAULT_RETENTION_DAYS
 from spyglass.db.store import ProjectStore
 from spyglass.server.util import parse_timestamp
 
@@ -25,14 +28,26 @@ def _store() -> ProjectStore:
     return current_app.config["STORE"]
 
 
+def _unwrap_batch(data: dict, key: str) -> list:
+    return data.get(key, [data])
+
+
+def _validate_metric_type(raw_type: str) -> tuple[MetricType | None, Response | None]:
+    try:
+        return MetricType(raw_type), None
+    except ValueError:
+        allowed = ", ".join(t.value for t in MetricType)
+        return None, jsonify({"error": f"unknown metric_type: {raw_type}. Allowed: {allowed}"})
+
+
 @api.post("/projects/register")
-def register_project() -> tuple:
+def register_project() -> tuple[Response, int]:
     data = request.get_json(silent=True) or {}
     project = data.get("project")
     if not project:
         return jsonify({"error": "project is required"}), 400
 
-    retention_days = int(data.get("retention_days", 30))
+    retention_days = int(data.get("retention_days", DEFAULT_RETENTION_DAYS))
     try:
         slug = _store().init_project(project, retention_days)
     except ValueError as exc:
@@ -42,7 +57,7 @@ def register_project() -> tuple:
 
 
 @api.post("/metrics")
-def ingest_metrics() -> tuple:
+def ingest_metrics() -> tuple[Response, int]:
     data = request.get_json(silent=True)
     if data is None:
         return jsonify({"error": "invalid JSON"}), 400
@@ -51,18 +66,15 @@ def ingest_metrics() -> tuple:
     if not project:
         return jsonify({"error": "project is required"}), 400
 
-    # Accept either {"project":..., "points":[...]} or a single-point dict.
-    raw_points = data.get("points") if "points" in data else [data]
+    raw_points = _unwrap_batch(data, "points")
 
     rows = []
     for p in raw_points:
         if not p.get("name") or not p.get("metric_type"):
             return jsonify({"error": "each point requires name and metric_type"}), 400
-        try:
-            metric_type = MetricType(p["metric_type"])
-        except ValueError:
-            allowed = ", ".join(t.value for t in MetricType)
-            return jsonify({"error": f"unknown metric_type: {p['metric_type']}. Allowed: {allowed}"}), 400
+        metric_type, err = _validate_metric_type(p["metric_type"])
+        if err is not None:
+            return err, 400
         tags = p.get("tags")
         rows.append(
             MetricPoint(
@@ -74,8 +86,9 @@ def ingest_metrics() -> tuple:
             )
         )
 
-    slug = _store().get_slug(project)
-    with _store().metrics_session(slug) as session:
+    store = _store()
+    slug = store.get_slug(project)
+    with store.metrics_session(slug) as session:
         session.add_all(rows)
         session.commit()
 
@@ -83,7 +96,7 @@ def ingest_metrics() -> tuple:
 
 
 @api.post("/logs")
-def ingest_logs() -> tuple:
+def ingest_logs() -> tuple[Response, int]:
     data = request.get_json(silent=True)
     if data is None:
         return jsonify({"error": "invalid JSON"}), 400
@@ -92,8 +105,7 @@ def ingest_logs() -> tuple:
     if not project:
         return jsonify({"error": "project is required"}), 400
 
-    # Accept either {"project":..., "entries":[...]} or a single-entry dict.
-    raw_entries = data.get("entries") if "entries" in data else [data]
+    raw_entries = _unwrap_batch(data, "entries")
 
     rows = []
     for e in raw_entries:
@@ -110,8 +122,9 @@ def ingest_logs() -> tuple:
             )
         )
 
-    slug = _store().get_slug(project)
-    with _store().logs_session(slug) as session:
+    store = _store()
+    slug = store.get_slug(project)
+    with store.logs_session(slug) as session:
         session.add_all(rows)
         session.commit()
 
@@ -119,23 +132,19 @@ def ingest_logs() -> tuple:
 
 
 @api.get("/metrics")
-def query_metrics() -> dict:
+def query_metrics() -> Response:
     project = request.args.get("project")
     if not project:
         return jsonify({"error": "project is required"}), 400
-
-    from sqlalchemy import select
 
     stmt = select(MetricPoint).order_by(MetricPoint.timestamp.desc())
 
     if name_prefix := request.args.get("name"):
         stmt = stmt.where(MetricPoint.name.startswith(name_prefix))
     if raw_type := request.args.get("metric_type"):
-        try:
-            metric_type = MetricType(raw_type)
-        except ValueError:
-            allowed = ", ".join(t.value for t in MetricType)
-            return jsonify({"error": f"unknown metric_type: {raw_type}. Allowed: {allowed}"}), 400
+        metric_type, err = _validate_metric_type(raw_type)
+        if err is not None:
+            return err, 400
         stmt = stmt.where(MetricPoint.metric_type == metric_type.value)
     if from_ts := request.args.get("from"):
         stmt = stmt.where(MetricPoint.timestamp >= parse_timestamp(from_ts))
@@ -146,8 +155,9 @@ def query_metrics() -> dict:
     if limit > 0:
         stmt = stmt.limit(limit)
 
-    slug = _store().get_slug(project)
-    with _store().metrics_session(slug) as session:
+    store = _store()
+    slug = store.get_slug(project)
+    with store.metrics_session(slug) as session:
         rows = session.execute(stmt).scalars().all()
 
     return jsonify(
@@ -165,12 +175,10 @@ def query_metrics() -> dict:
 
 
 @api.get("/logs")
-def query_logs() -> dict:
+def query_logs() -> Response:
     project = request.args.get("project")
     if not project:
         return jsonify({"error": "project is required"}), 400
-
-    from sqlalchemy import select
 
     stmt = select(LogEntry).order_by(LogEntry.timestamp.desc())
 
@@ -185,8 +193,9 @@ def query_logs() -> dict:
     if limit > 0:
         stmt = stmt.limit(limit)
 
-    slug = _store().get_slug(project)
-    with _store().logs_session(slug) as session:
+    store = _store()
+    slug = store.get_slug(project)
+    with store.logs_session(slug) as session:
         rows = session.execute(stmt).scalars().all()
 
     return jsonify(

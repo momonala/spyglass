@@ -3,9 +3,7 @@
 import logging
 import threading
 import time
-from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
 
 import schedule
 from sqlalchemy import delete
@@ -13,6 +11,7 @@ from sqlalchemy import delete
 from spyglass.db.models import LogEntry
 from spyglass.db.models import MetricPoint
 from spyglass.db.store import ProjectStore
+from spyglass.server.util import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ def run_retention(store: ProjectStore) -> None:
     """Delete stale rows from every known project's metrics and logs DBs."""
     for slug in store.all_slugs():
         retention_days = store.get_retention_days(slug)
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=retention_days)
+        cutoff = utcnow() - timedelta(days=retention_days)
 
         with store.metrics_session(slug) as session:
             result = session.execute(delete(MetricPoint).where(MetricPoint.timestamp < cutoff))

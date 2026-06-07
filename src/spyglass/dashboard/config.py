@@ -1,7 +1,6 @@
 """Config types for SummaryBuilder: declare what metrics mean, get typed summaries back."""
 
 from dataclasses import dataclass
-from dataclasses import field
 
 
 @dataclass(frozen=True)
@@ -10,7 +9,7 @@ class MetricSelector:
 
     suffix: str
     metric_type: str | None = None
-    tags: dict[str, str] = field(default_factory=dict)
+    tags: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)

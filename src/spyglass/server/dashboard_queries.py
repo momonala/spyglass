@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import Integer
 from sqlalchemy import cast
@@ -33,32 +34,28 @@ def auto_interval_seconds(
     return _NICE_INTERVALS_SECONDS[-1]
 
 
-def _bucket_expr(interval_seconds: int):
+def _bucket_expr(interval_seconds: int) -> Any:
     unix_ts = cast(func.strftime("%s", MetricPoint.timestamp), Integer)
     return cast(unix_ts / interval_seconds, Integer).label("bucket")
 
 
-def _aggregate_expr(metric_type: str):
+def _aggregate_expr(metric_type: str) -> Any:
     if metric_type == MetricType.COUNTER.value:
         return func.sum(MetricPoint.value).label("value")
     elif metric_type == MetricType.SET.value:
         return func.count(MetricPoint.value).label("value")
+    elif metric_type in (MetricType.GAUGE.value, MetricType.TIMING.value):
+        return func.avg(MetricPoint.value).label("value")
     else:
         return func.avg(MetricPoint.value).label("value")
 
 
 def list_projects(store: ProjectStore) -> list[dict]:
     """Return project slugs with optional display names from settings.json."""
-    result = []
-    for slug in sorted(store.all_slugs()):
-        project_dir = store.project_dir(slug)
-        settings_path = project_dir / "settings.json"
-        project = slug
-        if settings_path.exists():
-            settings = json.loads(settings_path.read_text())
-            project = settings.get("project", slug)
-        result.append({"slug": slug, "project": project})
-    return result
+    return [
+        {"slug": slug, "project": store.get_project_name(slug)}
+        for slug in sorted(store.all_slugs())
+    ]
 
 
 def list_metric_names(store: ProjectStore, project: str) -> list[dict]:
@@ -88,7 +85,7 @@ def query_metric_series(
     from_ts: datetime,
     to_ts: datetime,
     interval_seconds: int | None = None,
-) -> list[dict]:
+) -> dict:
     """Return bucketed time-series points for one metric."""
     slug = store.get_slug(project)
     metric_type = _metric_type_for_name(store, slug, name)
@@ -146,17 +143,21 @@ def query_metric_summary(
         .order_by(MetricPoint.timestamp.desc())
         .limit(1)
     )
-    sum_stmt = select(func.sum(MetricPoint.value)).where(*window_filter)
-    min_stmt = select(func.min(MetricPoint.value)).where(*window_filter)
-    avg_stmt = select(func.avg(MetricPoint.value)).where(*window_filter)
-    max_stmt = select(func.max(MetricPoint.value)).where(*window_filter)
+    agg_stmt = select(
+        func.sum(MetricPoint.value).label("total"),
+        func.min(MetricPoint.value).label("minimum"),
+        func.avg(MetricPoint.value).label("average"),
+        func.max(MetricPoint.value).label("maximum"),
+    ).where(*window_filter)
 
     with store.metrics_session(slug) as session:
         latest = session.execute(latest_stmt).scalar_one_or_none()
-        total = session.execute(sum_stmt).scalar_one_or_none()
-        minimum = session.execute(min_stmt).scalar_one_or_none()
-        average = session.execute(avg_stmt).scalar_one_or_none()
-        maximum = session.execute(max_stmt).scalar_one_or_none()
+        agg = session.execute(agg_stmt).one_or_none()
+
+    total = agg.total if agg else None
+    minimum = agg.minimum if agg else None
+    average = agg.average if agg else None
+    maximum = agg.maximum if agg else None
 
     def _f(v: float | None) -> float | None:
         return float(v) if v is not None else None

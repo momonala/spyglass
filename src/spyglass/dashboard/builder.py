@@ -26,6 +26,7 @@ from .config import StateTransitionRule
 from .schemas import ChartData
 from .schemas import StateUptime
 from .schemas import SummaryResponse
+from .schemas import TimingSummary
 from .schemas import WindowInfo
 
 
@@ -60,9 +61,9 @@ class SummaryBuilder:
         window_amount: int = DEFAULT_WINDOW_AMOUNT,
         window_unit: str = "hours",
         rollup: str = DEFAULT_ROLLUP,
-        _now: datetime | None = None,
+        now: datetime | None = None,
     ) -> SummaryResponse:
-        now = _now or datetime.now(timezone.utc)
+        now = now or datetime.now(timezone.utc)
         amount = parse_window_amount(window_amount)
         unit = parse_window_unit(window_unit)
         rollup_val = parse_rollup(rollup)
@@ -89,9 +90,11 @@ class SummaryBuilder:
             logs=prepared_logs,
         )
 
-    def _aggregate_selectors(self, metrics: list[dict]) -> tuple[dict, dict, dict]:
+    def _aggregate_selectors(
+        self, metrics: list[dict]
+    ) -> tuple[dict[str, float], dict[str, TimingSummary], dict[str, float | None]]:
         counters: dict[str, float] = {}
-        timings = {}
+        timings: dict[str, TimingSummary] = {}
         gauges: dict[str, float | None] = {}
         for name, sel in self._selectors.items():
             tags = sel.tags or None
@@ -100,7 +103,9 @@ class SummaryBuilder:
             elif sel.metric_type == "timing":
                 timings[name] = timing_summary(metrics, sel.suffix, tags=tags)
             elif sel.metric_type == "gauge":
-                gauges[name] = latest_gauge(metrics, sel.suffix)
+                gauges[name] = latest_gauge(metrics, sel.suffix, tags=tags)
+            else:
+                raise ValueError(f"unsupported metric_type {sel.metric_type!r} for selector {name!r}")
         return counters, timings, gauges
 
     def _compute_uptime(

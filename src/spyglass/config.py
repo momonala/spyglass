@@ -1,21 +1,13 @@
-import tomllib
-from pathlib import Path
-
 import typer
 
-_config_file = Path(__file__).parent.parent.parent / "pyproject.toml"
-with _config_file.open("rb") as f:
-    _config = tomllib.load(f)
+from spyglass._config import CONFIG
 
-_project_config = _config["project"]
-_tool_config = _config["tool"]["config"]
-
-PROJECT_NAME = _project_config["name"]
-PROJECT_VERSION = _project_config["version"]
-FLASK_PORT = _tool_config["port"]
-DATA_DIR = _tool_config["data_dir"]
-HOST = _tool_config["host"]
-RETENTION_DAYS = _tool_config["retention_days"]
+PROJECT_NAME = CONFIG.project_name
+PROJECT_VERSION = CONFIG.project_version
+FLASK_PORT = CONFIG.port
+DATA_DIR = CONFIG.data_dir
+HOST = CONFIG.host
+RETENTION_DAYS = CONFIG.retention_days
 
 
 def config_cli(
@@ -40,29 +32,28 @@ def config_cli(
         typer.echo(f"retention_days={RETENTION_DAYS}")
         return
 
-    param_map = {
-        project_name: PROJECT_NAME,
-        project_version: PROJECT_VERSION,
-        flask_port: FLASK_PORT,
-        data_dir: DATA_DIR,
-        host: HOST,
-        retention_days: RETENTION_DAYS,
-    }
+    if project_name:
+        typer.echo(PROJECT_NAME)
+    elif project_version:
+        typer.echo(PROJECT_VERSION)
+    elif flask_port:
+        typer.echo(FLASK_PORT)
+    elif data_dir:
+        typer.echo(DATA_DIR)
+    elif host:
+        typer.echo(HOST)
+    elif retention_days:
+        typer.echo(RETENTION_DAYS)
+    else:
+        typer.secho(
+            "Error: No config key specified. Use --help to see available options.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
 
-    for is_set, value in param_map.items():
-        if is_set:
-            typer.echo(value)
-            return
 
-    typer.secho(
-        "Error: No config key specified. Use --help to see available options.",
-        fg=typer.colors.RED,
-        err=True,
-    )
-    raise typer.Exit(1)
-
-
-def main():
+def main() -> None:
     typer.run(config_cli)
 
 

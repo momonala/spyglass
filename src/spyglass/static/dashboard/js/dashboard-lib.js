@@ -7,6 +7,10 @@
  * time-window controls, and error handling for free.
  */
 
+/* ── Constants ──────────────────────────────────────────────────────── */
+
+const FONT_SANS = '"Inter", system-ui, -apple-system, sans-serif';
+
 /* ── Color palette ──────────────────────────────────────────────────── */
 
 const COLORS = {
@@ -35,9 +39,9 @@ const fmt = {
 /* ── Time window ────────────────────────────────────────────────────── */
 
 function _getTimeWindow() {
-  const amount = parseInt(document.getElementById("windowAmount").value, 10) || 6;
-  const unit = document.getElementById("windowUnit").value;
-  const rollupVal = document.getElementById("rollupWindow").value;
+  const amount = parseInt(document.getElementById("windowAmount")?.value, 10) || 6;
+  const unit = document.getElementById("windowUnit")?.value ?? "hours";
+  const rollupVal = document.getElementById("rollupWindow")?.value ?? "60";
   const multipliers = { hours: 1, days: 24, weeks: 168 };
   const hours = amount * (multipliers[unit] ?? 1);
   const to = new Date();
@@ -98,7 +102,7 @@ function _upsertChart(canvasId, config) {
 }
 
 function _baseChartOptions(win, yLabel) {
-  const sans = '"Inter", system-ui, -apple-system, sans-serif';
+  const sans = FONT_SANS;
   const spanHours = win?.spanHours ?? 24;
   return {
     responsive: true,
@@ -411,7 +415,8 @@ function _buildCollapsibleTraceback(lines) {
   copyBtn.type = "button";
   copyBtn.className = "tb-copy";
   copyBtn.setAttribute("aria-label", "Copy traceback");
-  copyBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+  const _COPY_ICON_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  copyBtn.insertAdjacentHTML("beforeend", _COPY_ICON_SVG);
   copyBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     const text = lines[lines.length - 1] === "" ? lines.slice(0, -1).join("\n") : lines.join("\n");
@@ -500,7 +505,7 @@ function _renderLogHistogram(logs) {
     }
   }
 
-  const sans = '"Inter", system-ui, -apple-system, sans-serif';
+  const sans = FONT_SANS;
   const windowHours = (Date.now() - _logWindowStart.getTime()) / 3_600_000;
   const labels = Array.from({ length: numBuckets }, (_, i) =>
     new Date(startMs + i * bucketMs).toISOString()
@@ -698,8 +703,9 @@ function _switchView(view) {
 
 function _initLogSection() {
   for (const id of ["logLevelFilter", "logLoggerFilter", "logContentFilter"]) {
-    document.getElementById(id)?.addEventListener("input", _refreshLogViews);
-    document.getElementById(id)?.addEventListener("change", _refreshLogViews);
+    const el = document.getElementById(id);
+    el?.addEventListener("input", _refreshLogViews);
+    el?.addEventListener("change", _refreshLogViews);
   }
   document.getElementById("logsViewBtn")?.addEventListener("click", () => _switchView("logs"));
   document.getElementById("patternsViewBtn")?.addEventListener("click", () => _switchView("patterns"));
@@ -714,6 +720,10 @@ async function _loadLogs(project, win, signal) {
     ? win.rollupSeconds / 60
     : Math.max(5, Math.round(windowHours * 60 / 40));
   _allLogs = Array.isArray(logs) ? logs : [];
+  const currentKeys = new Set(_allLogs.map(_getLogKey));
+  for (const key of _expandedLogs) {
+    if (!currentKeys.has(key)) _expandedLogs.delete(key);
+  }
   _refreshLogViews();
 }
 
@@ -795,7 +805,10 @@ function initDashboard({ project, loadFn, defaultWindowAmount = 1, defaultWindow
     if (e.key === "Enter") load();
   });
 
+  const _intervalId = setInterval(load, 30_000);
+
   globalThis.addEventListener("beforeunload", () => {
+    clearInterval(_intervalId);
     Object.values(_chartInstances).forEach((c) => c.destroy());
   });
 
@@ -804,6 +817,4 @@ function initDashboard({ project, loadFn, defaultWindowAmount = 1, defaultWindow
   } else {
     load();
   }
-
-  setInterval(load, 30_000);
 }

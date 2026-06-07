@@ -8,6 +8,12 @@ import logging
 
 import requests
 
+
+def _normalize_host(host: str) -> str:
+    if host.startswith(("http://", "https://")):
+        return host
+    return f"http://{host}"
+
 _HTTP_LOGGER_NAMES = (
     "urllib3",
     "urllib3.connectionpool",

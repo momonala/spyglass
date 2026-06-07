@@ -9,19 +9,19 @@
       <h2 id="dbWritesHeading">DB Writes</h2>
       <p class="card-subtitle">MQTT messages received vs database writes over time</p>
     </div>
-    <div class="chart-card" style="border:none;padding:0;min-height:200px">
+    <div class="chart-card chart-card--inset">
       <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
     </div>
   </section>
 
-  <div class="card-full" style="display:flex;gap:16px;align-items:stretch;">
+  <div class="card-full em-stat-row">
 
     <section class="card" style="flex:3;min-width:0;" aria-labelledby="latencyHeading">
       <div class="card-header">
         <h2 id="latencyHeading">Write Latency</h2>
         <p class="card-subtitle">DB save timing (ms)</p>
       </div>
-      <div class="chart-card" style="border:none;padding:0;min-height:200px">
+      <div class="chart-card chart-card--inset">
         <canvas id="chartLatency" aria-label="DB write latency over time"></canvas>
       </div>
     </section>

@@ -3,10 +3,9 @@
 import inspect
 import logging
 
+from spyglass.client.collector import SPYGLASS_PACKAGE
 from spyglass.client.collector import MetricsCollector
 from spyglass.client.logging import configure_logging
-
-SPYGLASS_PACKAGE = "spyglass"
 
 
 def _caller_logger_name() -> str:

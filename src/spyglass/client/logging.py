@@ -8,14 +8,11 @@ import logging
 from datetime import datetime
 from datetime import timezone
 
+import requests
+
+from spyglass.client.http_client import _normalize_host
 from spyglass.client.http_client import create_session
 from spyglass.client.http_client import silence_client_transport_loggers
-
-
-def _normalize_host(host: str) -> str:
-    if host.startswith(("http://", "https://")):
-        return host
-    return f"http://{host}"
 
 
 def _extract_extra(record: logging.LogRecord) -> dict | None:
@@ -81,7 +78,7 @@ class SpyglassHandler(logging.Handler):
                 ],
             }
             self._session.post(f"{self._host}/logs", json=payload, timeout=self._timeout)
-        except Exception as exc:
+        except requests.RequestException as exc:
             logging.getLogger(__name__).debug("spyglass log emit failed: %s", exc)
 
     def handleError(self, record: logging.LogRecord) -> None:

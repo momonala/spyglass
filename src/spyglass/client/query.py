@@ -8,22 +8,18 @@ from datetime import timezone
 
 import requests
 
+from spyglass.client.http_client import _normalize_host
+
 _log = logging.getLogger(__name__)
 
 _DEFAULT_LIMIT = 5000
 _DEFAULT_TIMEOUT = 5.0
 
 
-def _normalize_host(host: str) -> str:
-    if host.startswith(("http://", "https://")):
-        return host
-    return f"http://{host}"
-
-
 def _iso(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class SpyglassQueryClient:
@@ -56,7 +52,7 @@ class SpyglassQueryClient:
             resp = self._session.get(f"{self._base}/status", timeout=self._timeout)
             resp.raise_for_status()
             return resp.json()
-        except Exception as exc:
+        except requests.RequestException as exc:
             _log.debug("spyglass status check failed: %s", exc)
             return None
 
