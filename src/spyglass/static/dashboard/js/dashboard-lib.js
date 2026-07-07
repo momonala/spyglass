@@ -453,17 +453,31 @@ let _expandedLogs = new Set();
 
 /* Log pattern grouping */
 
+const _NUM_WITH_UNIT_RE = /-?\d+\.?\d*(?:[eE][+-]?\d+)?(?:ms|s|W|kW|mV|V|A|mA|B|KB|MB|GB|%|°C)\b/gi;
+const _STRUCTURED_PAYLOAD_RE = /^(.*?[:]\s*)([\[{].*[\]}])\s*$/;
+
 function _tokenizeMessage(msg) {
-  return msg
+  let normalized = msg
+  // Stable identifiers and timestamps before generic number masking.
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "*")
+    .replace(/\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?\b/g, "*")
     .replace(/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g, "*")
+    .replace(/\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b/gi, "*")
     .replace(/\b0x[0-9a-f]+\b/gi, "*")
-    .replace(/\b[0-9a-f]{32,}\b/gi, "*")
-    .replace(/"[^"\n]{0,200}"/g, '"*"')
-    .replace(/'[^'\n]{0,200}'/g, "'*'")
-    .replace(/\b\d+\.?\d*\b/g, "*")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/\b[0-9a-f]{8,}\b/gi, "*")
+    .replace(/\b\d+:\d{2}:\d{2}\b/g, "*")
+    .replace(/"[^"\n]{0,500}"/g, '"*"')
+    .replace(/'[^'\n]{0,500}'/g, "'*'")
+    .replace(/([A-Za-z_][\w]*=)[^\s,})\]]+/g, "$1*")
+    .replace(_NUM_WITH_UNIT_RE, "*")
+    .replace(/\b-?\d+\.?\d*\b/g, "*");
+
+  const structuredPayload = normalized.match(_STRUCTURED_PAYLOAD_RE);
+  if (structuredPayload) {
+    normalized = `${structuredPayload[1]}*`;
+  }
+
+  return normalized.replace(/\s+/g, " ").trim();
 }
 
 /* Filtering */
