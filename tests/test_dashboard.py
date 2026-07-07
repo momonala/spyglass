@@ -451,3 +451,85 @@ def test_query_client_fetch_metrics_raises_on_http_error():
     client = SpyglassQueryClient(host="localhost:9999", project="test", timeout=0.01)
     with pytest.raises(Exception):
         client.fetch_metrics(since=datetime.now(timezone.utc))
+
+
+# ---------------------------------------------------------------------------
+# Dashboard metrics API (tag filtering, timing percentiles, tag-values)
+# ---------------------------------------------------------------------------
+
+
+def _ingest_points(client, project: str, points: list[dict]) -> None:
+    resp = client.post("/metrics", json={"project": project, "points": points})
+    assert resp.status_code == 201
+
+
+def test_dashboard_summary_tag_filter(client):
+    project = "tag-test"
+    metric = f"{project}.fn.vbb.error"
+    _ingest_points(client, project, [
+        {"name": metric, "metric_type": "counter", "value": 5, "tags": {"kind": "http_503"}},
+        {"name": metric, "metric_type": "counter", "value": 2, "tags": {"kind": "timeout"}},
+    ])
+
+    all_resp = client.get(f"/dashboard/api/metrics/summary?project={project}&name={metric}")
+    assert all_resp.status_code == 200
+    assert all_resp.get_json()["sum"] == 7.0
+
+    filtered = client.get(
+        f"/dashboard/api/metrics/summary?project={project}&name={metric}&tag_kind=http_503"
+    )
+    assert filtered.status_code == 200
+    assert filtered.get_json()["sum"] == 5.0
+
+
+def test_dashboard_series_tag_filter(client):
+    project = "tag-series"
+    metric = f"{project}.fn.vbb.error"
+    _ingest_points(client, project, [
+        {"name": metric, "metric_type": "counter", "value": 3, "tags": {"kind": "http_503"}},
+        {"name": metric, "metric_type": "counter", "value": 9, "tags": {"kind": "timeout"}},
+    ])
+
+    resp = client.get(
+        f"/dashboard/api/metrics/series?project={project}&name={metric}&tag_kind=timeout"
+    )
+    assert resp.status_code == 200
+    points = resp.get_json()["points"]
+    assert len(points) >= 1
+    assert sum(p["value"] for p in points) == 9.0
+
+
+def test_dashboard_summary_timing_percentiles(client):
+    project = "timing-pct"
+    metric = f"{project}.fn.vbb.fetch"
+    _ingest_points(client, project, [
+        {"name": metric, "metric_type": "timing", "value": 100},
+        {"name": metric, "metric_type": "timing", "value": 200},
+        {"name": metric, "metric_type": "timing", "value": 400},
+    ])
+
+    resp = client.get(f"/dashboard/api/metrics/summary?project={project}&name={metric}")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["metric_type"] == "timing"
+    assert data["count"] == 3
+    assert data["p50"] == 200.0
+    assert data["p95"] == 400.0
+
+
+def test_dashboard_tag_values(client):
+    project = "tag-values"
+    metric = f"{project}.fn.vbb.error"
+    _ingest_points(client, project, [
+        {"name": metric, "metric_type": "counter", "value": 1, "tags": {"kind": "http_503"}},
+        {"name": metric, "metric_type": "counter", "value": 1, "tags": {"kind": "timeout"}},
+        {"name": metric, "metric_type": "counter", "value": 1, "tags": {"kind": "http_503"}},
+    ])
+
+    resp = client.get(
+        f"/dashboard/api/metrics/tag-values?project={project}&name={metric}&key=kind"
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["key"] == "kind"
+    assert set(data["values"]) == {"http_503", "timeout"}

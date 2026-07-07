@@ -14,7 +14,7 @@
     <section class="card" aria-labelledby="displayHeading">
       <div class="card-header">
         <h2 id="displayHeading">Display (iPad)</h2>
-        <p class="card-subtitle">Raw outcome counts in window</p>
+        <p class="card-subtitle">Outcome counts and freshness in window</p>
       </div>
       <div class="stat-grid">
         <div class="stat">
@@ -33,6 +33,18 @@
           <span class="stat-label">502 errors</span>
           <span id="stat-failed" class="stat-value">—</span>
         </div>
+        <div class="stat">
+          <span class="stat-label">Success rate</span>
+          <span id="stat-success-rate" class="stat-value stat-danger-or-healthy">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Snapshot age</span>
+          <span id="stat-snapshot-age" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Seconds since fresh</span>
+          <span id="stat-seconds-since-fresh" class="stat-value">—</span>
+        </div>
       </div>
     </section>
 
@@ -47,12 +59,20 @@
           <span id="stat-vbb-errors" class="stat-value">—</span>
         </div>
         <div class="stat">
+          <span class="stat-label">Successes</span>
+          <span id="stat-vbb-success" class="stat-value">—</span>
+        </div>
+        <div class="stat">
           <span class="stat-label">Cache hits</span>
           <span id="stat-cache-hits" class="stat-value">—</span>
         </div>
         <div class="stat">
           <span class="stat-label">Cache misses</span>
           <span id="stat-cache-misses" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Fetch p95</span>
+          <span id="stat-vbb-p95" class="stat-value">—</span>
         </div>
         <div class="stat">
           <span class="stat-label">Fetch avg</span>
@@ -63,14 +83,39 @@
 
   </div>
 
-  <section class="card card-full" aria-labelledby="vbbErrorsHeading">
+  <section class="card card-full" aria-labelledby="displayOutcomesHeading">
     <div class="card-header">
-      <h2 id="vbbErrorsHeading">VBB errors</h2>
+      <h2 id="displayOutcomesHeading">Display outcomes</h2>
+      <p class="card-subtitle">Fresh vs fallback vs no snapshot vs 502 over time</p>
     </div>
     <div class="chart-card chart-card--inset">
-      <canvas id="chartVbbHealth" aria-label="VBB errors over time"></canvas>
+      <canvas id="chartDisplayOutcomes" aria-label="Display outcome counts over time"></canvas>
     </div>
   </section>
+
+  <div class="card-full em-stat-row">
+
+    <section class="card" style="flex:1;min-width:0;" aria-labelledby="vbbErrorsHeading">
+      <div class="card-header">
+        <h2 id="vbbErrorsHeading">VBB error breakdown</h2>
+        <p class="card-subtitle">Errors by kind (tagged)</p>
+      </div>
+      <div class="chart-card chart-card--inset">
+        <canvas id="chartVbbErrors" aria-label="VBB errors by kind over time"></canvas>
+      </div>
+    </section>
+
+    <section class="card" style="flex:1;min-width:0;" aria-labelledby="vbbFetchHeading">
+      <div class="card-header">
+        <h2 id="vbbFetchHeading">VBB fetch latency</h2>
+        <p class="card-subtitle">p50 by outcome (ok vs error)</p>
+      </div>
+      <div class="chart-card chart-card--inset">
+        <canvas id="chartVbbFetch" aria-label="VBB fetch latency by outcome"></canvas>
+      </div>
+    </section>
+
+  </div>
 
 {% endblock %}
 
@@ -81,21 +126,26 @@
 // Verify names against /dashboard/api/metrics/names?project=trainspotter if charts are empty.
 const PROJECT = "trainspotter";
 const M = {
-  // @metrics.timed("stations") decorator on api_stations → __enter__ caller
   stationsLatency:  `${PROJECT}.__enter__.stations`,
-  // @metrics.timed("display_data") decorator on api_display_data → __enter__ caller
   displayLatency:   `${PROJECT}.__enter__.display_data`,
-  // with metrics.timed("vbb.fetch"): inside _fetch_departures_from_vbb
   vbbFetch:    `${PROJECT}._fetch_departures_from_vbb.vbb.fetch`,
   vbbError:    `${PROJECT}._fetch_departures_from_vbb.vbb.error`,
+  vbbSuccess:  `${PROJECT}._fetch_departures_from_vbb.vbb.success`,
   cacheHit:    `${PROJECT}.get_inbound_trains_cached.vbb.cache_hit`,
   cacheMiss:   `${PROJECT}.get_inbound_trains_cached.vbb.cache_miss`,
-  // counters inside _fetch_display_departures
-  displayFresh:      `${PROJECT}._fetch_display_departures.display.fresh`,
-  displayFallback:   `${PROJECT}._fetch_display_departures.display.fallback`,
-  displayNoSnapshot: `${PROJECT}._fetch_display_departures.display.no_snapshot`,
-  // counter inside api_display_data
+  displayFresh:           `${PROJECT}._fetch_display_departures.display.fresh`,
+  displayFallback:        `${PROJECT}._fetch_display_departures.display.fallback`,
+  displayNoSnapshot:      `${PROJECT}._fetch_display_departures.display.no_snapshot`,
+  displaySnapshotAge:     `${PROJECT}._fetch_display_departures.display.snapshot_age_seconds`,
+  displaySecondsSinceFresh: `${PROJECT}._fetch_display_departures.display.seconds_since_fresh`,
   display502: `${PROJECT}.api_display_data.response.502`,
+};
+
+const VBB_ERROR_KINDS = ["http_503", "timeout", "connection"];
+const VBB_ERROR_COLORS = {
+  http_503: COLORS.danger,
+  timeout: COLORS.warn,
+  connection: COLORS.purple,
 };
 
 initDashboard({
@@ -107,7 +157,26 @@ initDashboard({
         { label: "display_data (ms)", metricName: M.displayLatency,  color: COLORS.purple },
       ], win, signal),
 
-      buildBarChart("chartVbbHealth", PROJECT, M.vbbError, COLORS.danger, "VBB errors", win, signal),
+      buildStackedBarChart("chartDisplayOutcomes", PROJECT, [
+        { label: "fresh",        metricName: M.displayFresh,      color: COLORS.success },
+        { label: "fallback",     metricName: M.displayFallback,   color: COLORS.warn },
+        { label: "no snapshot",  metricName: M.displayNoSnapshot, color: COLORS.danger },
+        { label: "502",          metricName: M.display502,        color: COLORS.muted },
+      ], win, signal),
+
+      buildStackedBarChart("chartVbbErrors", PROJECT,
+        VBB_ERROR_KINDS.map((kind) => ({
+          label: kind,
+          metricName: M.vbbError,
+          color: VBB_ERROR_COLORS[kind] ?? COLORS.muted,
+          tags: { kind },
+        })),
+        win, signal),
+
+      buildLineChart("chartVbbFetch", PROJECT, [
+        { label: "ok (ms)",    metricName: M.vbbFetch, color: COLORS.success, tags: { outcome: "ok" } },
+        { label: "error (ms)", metricName: M.vbbFetch, color: COLORS.danger,  tags: { outcome: "error" } },
+      ], win, signal),
 
       fillStats(PROJECT, [
         { elementId: "stat-fresh",       metricName: M.displayFresh,      pick: (s) => s.sum, format: "count" },
@@ -116,13 +185,35 @@ initDashboard({
           danger: (s) => (s.sum ?? 0) > 0 },
         { elementId: "stat-failed",      metricName: M.display502,        pick: (s) => s.sum, format: "count",
           danger: (s) => (s.sum ?? 0) > 0 },
+        { elementId: "stat-snapshot-age", metricName: M.displaySnapshotAge,
+          pick: (s) => s.latest_value, format: "secondsValue" },
+        { elementId: "stat-seconds-since-fresh", metricName: M.displaySecondsSinceFresh,
+          pick: (s) => s.latest_value, format: "secondsValue" },
       ], win, signal),
+
+      fillDerivedStat(PROJECT, {
+        elementId: "stat-success-rate",
+        sources: [
+          { metricName: M.displayFresh },
+          { metricName: M.displayFallback },
+          { metricName: M.displayNoSnapshot },
+        ],
+        compute: ([fresh, fallback, noSnapshot]) => {
+          const f = fresh?.sum ?? 0;
+          const total = f + (fallback?.sum ?? 0) + (noSnapshot?.sum ?? 0);
+          return total > 0 ? (f / total) * 100 : null;
+        },
+        format: "percent",
+        danger: (_summaries, value) => value != null && value < 50,
+      }, win, signal),
 
       fillStats(PROJECT, [
         { elementId: "stat-vbb-errors",   metricName: M.vbbError,  pick: (s) => s.sum, format: "count",
           danger: (s) => (s.sum ?? 0) > 0 },
+        { elementId: "stat-vbb-success",  metricName: M.vbbSuccess, pick: (s) => s.sum, format: "count" },
         { elementId: "stat-cache-hits",   metricName: M.cacheHit,  pick: (s) => s.sum, format: "count" },
         { elementId: "stat-cache-misses", metricName: M.cacheMiss, pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-vbb-p95",      metricName: M.vbbFetch,  pick: (s) => s.p95 ?? s.max, format: "ms" },
         { elementId: "stat-vbb-avg",      metricName: M.vbbFetch,  pick: (s) => s.avg, format: "ms" },
       ], win, signal),
     ]);

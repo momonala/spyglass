@@ -50,6 +50,26 @@ def _aggregate_expr(metric_type: str) -> Any:
         return func.avg(MetricPoint.value).label("value")
 
 
+def _tag_filter_clauses(tags: dict[str, str] | None) -> list[Any]:
+    """Build WHERE clauses matching json_extract(tags, '$.{key}') = value."""
+    if not tags:
+        return []
+    return [func.json_extract(MetricPoint.tags, f"$.{key}") == value for key, value in tags.items()]
+
+
+def _timing_percentiles(values: list[float]) -> dict[str, float | int | None]:
+    """Compute count/p50/p95 over sorted timing values."""
+    if not values:
+        return {"count": 0, "p50": None, "p95": None}
+    sorted_values = sorted(values)
+    n = len(sorted_values)
+    return {
+        "count": n,
+        "p50": sorted_values[min(int(n * 0.50), n - 1)],
+        "p95": sorted_values[min(int(n * 0.95), n - 1)],
+    }
+
+
 def list_projects(store: ProjectStore) -> list[dict]:
     """Return project slugs with optional display names from settings.json."""
     return [{"slug": slug, "project": store.get_project_name(slug)} for slug in sorted(store.all_slugs())]
@@ -82,6 +102,7 @@ def query_metric_series(
     from_ts: datetime,
     to_ts: datetime,
     interval_seconds: int | None = None,
+    tags: dict[str, str] | None = None,
 ) -> dict:
     """Return bucketed time-series points for one metric."""
     slug = store.get_slug(project)
@@ -97,6 +118,7 @@ def query_metric_series(
         .where(MetricPoint.name == name)
         .where(MetricPoint.timestamp >= from_ts)
         .where(MetricPoint.timestamp <= to_ts)
+        .where(*_tag_filter_clauses(tags))
         .group_by(bucket_col)
         .order_by(bucket_col)
     )
@@ -123,20 +145,23 @@ def query_metric_summary(
     name: str,
     from_ts: datetime,
     to_ts: datetime,
+    tags: dict[str, str] | None = None,
 ) -> dict:
     """Return latest value, window sum, and window min/avg/max for a metric."""
     slug = store.get_slug(project)
     metric_type = _metric_type_for_name(store, slug, name)
+    tag_clauses = _tag_filter_clauses(tags)
 
     window_filter = [
         MetricPoint.name == name,
         MetricPoint.timestamp >= from_ts,
         MetricPoint.timestamp <= to_ts,
+        *tag_clauses,
     ]
 
     latest_stmt = (
         select(MetricPoint.value)
-        .where(MetricPoint.name == name)
+        .where(MetricPoint.name == name, *tag_clauses)
         .order_by(MetricPoint.timestamp.desc())
         .limit(1)
     )
@@ -150,6 +175,10 @@ def query_metric_summary(
     with store.metrics_session(slug) as session:
         latest = session.execute(latest_stmt).scalar_one_or_none()
         agg = session.execute(agg_stmt).one_or_none()
+        timing_values: list[float] | None = None
+        if metric_type == MetricType.TIMING.value:
+            timing_stmt = select(MetricPoint.value).where(*window_filter)
+            timing_values = [float(v) for v in session.execute(timing_stmt).scalars().all()]
 
     total = agg.total if agg else None
     minimum = agg.minimum if agg else None
@@ -159,7 +188,7 @@ def query_metric_summary(
     def _f(v: float | None) -> float | None:
         return float(v) if v is not None else None
 
-    return {
+    result = {
         "metric_type": metric_type,
         "latest_value": _f(latest),
         "sum": _f(total),
@@ -167,6 +196,35 @@ def query_metric_summary(
         "avg": _f(average),
         "max": _f(maximum),
     }
+    if metric_type == MetricType.TIMING.value:
+        percentiles = _timing_percentiles(timing_values or [])
+        result["count"] = percentiles["count"]
+        result["p50"] = _f(percentiles["p50"])
+        result["p95"] = _f(percentiles["p95"])
+    return result
+
+
+def query_metric_tag_values(
+    store: ProjectStore,
+    project: str,
+    name: str,
+    key: str,
+) -> dict:
+    """Return distinct tag values for one key on a metric name."""
+    slug = store.get_slug(project)
+    path = f"$.{key}"
+    tag_col = func.json_extract(MetricPoint.tags, path).label("tag_value")
+    stmt = (
+        select(tag_col)
+        .where(MetricPoint.name == name)
+        .where(MetricPoint.tags.isnot(None))
+        .where(tag_col.isnot(None))
+        .distinct()
+        .order_by(tag_col)
+    )
+    with store.metrics_session(slug) as session:
+        values = [row.tag_value for row in session.execute(stmt).all()]
+    return {"key": key, "values": values}
 
 
 def query_metric_histogram(
@@ -176,6 +234,7 @@ def query_metric_histogram(
     from_ts: datetime,
     to_ts: datetime,
     bins: int = DEFAULT_HISTOGRAM_BINS,
+    tags: dict[str, str] | None = None,
 ) -> dict:
     """Return equal-width histogram bins for timing metric values."""
     slug = store.get_slug(project)
@@ -185,6 +244,7 @@ def query_metric_histogram(
         .where(MetricPoint.name == name)
         .where(MetricPoint.timestamp >= from_ts)
         .where(MetricPoint.timestamp <= to_ts)
+        .where(*_tag_filter_clauses(tags))
         .order_by(MetricPoint.timestamp)
     )
 

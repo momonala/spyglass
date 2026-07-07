@@ -48,6 +48,15 @@ def _parse_window() -> tuple[object, object]:
     return from_ts, to_ts
 
 
+def _parse_tag_filters() -> dict[str, str]:
+    """Parse tag_{key}={value} query params into a tag filter dict."""
+    tags: dict[str, str] = {}
+    for param, value in request.args.items():
+        if param.startswith("tag_") and value:
+            tags[param[4:]] = value
+    return tags
+
+
 def _list_project_templates() -> list[str]:
     return sorted(
         os.path.splitext(f)[0]
@@ -107,7 +116,9 @@ def dashboard_metric_series():
     else:
         interval_seconds = None
     return jsonify(
-        dashboard_queries.query_metric_series(_store(), project, name, from_ts, to_ts, interval_seconds)
+        dashboard_queries.query_metric_series(
+            _store(), project, name, from_ts, to_ts, interval_seconds, _parse_tag_filters()
+        )
     )
 
 
@@ -118,7 +129,23 @@ def dashboard_metric_summary():
     if not name:
         abort(400, "name is required")
     from_ts, to_ts = _parse_window()
-    return jsonify(dashboard_queries.query_metric_summary(_store(), project, name, from_ts, to_ts))
+    return jsonify(
+        dashboard_queries.query_metric_summary(
+            _store(), project, name, from_ts, to_ts, _parse_tag_filters()
+        )
+    )
+
+
+@site.get("/dashboard/api/metrics/tag-values")
+def dashboard_metric_tag_values():
+    project = _require_project()
+    name = request.args.get("name")
+    key = request.args.get("key")
+    if not name:
+        abort(400, "name is required")
+    if not key:
+        abort(400, "key is required")
+    return jsonify(dashboard_queries.query_metric_tag_values(_store(), project, name, key))
 
 
 @site.get("/dashboard/api/metrics/histogram")
@@ -135,7 +162,11 @@ def dashboard_metric_histogram():
             bins = int(raw_bins)
         except ValueError:
             abort(400, "bins must be an integer")
-    return jsonify(dashboard_queries.query_metric_histogram(_store(), project, name, from_ts, to_ts, bins))
+    return jsonify(
+        dashboard_queries.query_metric_histogram(
+            _store(), project, name, from_ts, to_ts, bins, _parse_tag_filters()
+        )
+    )
 
 
 @site.get("/dashboard/api/layout")

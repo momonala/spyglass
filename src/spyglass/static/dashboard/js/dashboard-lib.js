@@ -29,6 +29,7 @@ const fmt = {
   count:     (n) => n == null ? "—" : Math.round(n).toLocaleString(),
   ms:        (n) => n == null ? "—" : `${n.toFixed(1)} ms`,
   seconds:   (n) => n == null ? "—" : `${(n / 1000).toFixed(2).replace(/\.?0+$/, "")} s`,
+  secondsValue: (n) => n == null ? "—" : `${Math.round(n)} s`,
   percent:   (n) => n == null ? "—" : `${n.toFixed(1)}%`,
   timestamp: (iso) => {
     if (!iso) return "—";
@@ -68,18 +69,34 @@ function _formatFullTimestamp(ts) {
 
 /* ── Fetch layer ────────────────────────────────────────────────────── */
 
-async function fetchSeries(project, metricName, win, signal) {
+function _applyTags(qs, tags) {
+  if (!tags) return;
+  for (const [key, value] of Object.entries(tags)) {
+    qs.set(`tag_${key}`, value);
+  }
+}
+
+async function fetchSeries(project, metricName, win, signal, tags) {
   const qs = new URLSearchParams({ project, name: metricName, from: win.from, to: win.to });
   qs.set("interval", win.rollupSeconds);
+  _applyTags(qs, tags);
   const r = await fetch(`/dashboard/api/metrics/series?${qs}`, { signal });
   if (!r.ok) throw new Error(`fetchSeries ${metricName}: HTTP ${r.status}`);
   return r.json();
 }
 
-async function fetchSummary(project, metricName, win, signal) {
+async function fetchSummary(project, metricName, win, signal, tags) {
   const qs = new URLSearchParams({ project, name: metricName, from: win.from, to: win.to });
+  _applyTags(qs, tags);
   const r = await fetch(`/dashboard/api/metrics/summary?${qs}`, { signal });
   if (!r.ok) throw new Error(`fetchSummary ${metricName}: HTTP ${r.status}`);
+  return r.json();
+}
+
+async function fetchTagValues(project, metricName, key, signal) {
+  const qs = new URLSearchParams({ project, name: metricName, key });
+  const r = await fetch(`/dashboard/api/metrics/tag-values?${qs}`, { signal });
+  if (!r.ok) throw new Error(`fetchTagValues ${metricName}.${key}: HTTP ${r.status}`);
   return r.json();
 }
 
@@ -94,10 +111,27 @@ async function _fetchLogs(project, win, signal) {
 
 const _chartInstances = {};
 
+/** Clear inline sizing Chart.js sets on <canvas> so refresh cycles cannot inflate height. */
+function _resetCanvas(canvas) {
+  canvas.removeAttribute("style");
+  canvas.removeAttribute("width");
+  canvas.removeAttribute("height");
+}
+
 function _upsertChart(canvasId, config) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || typeof Chart === "undefined") return;
-  _chartInstances[canvasId]?.destroy();
+
+  const existing = _chartInstances[canvasId];
+  if (existing?.config?.type === config.type) {
+    existing.data = config.data;
+    existing.options = config.options;
+    existing.update("none");
+    return;
+  }
+
+  existing?.destroy();
+  _resetCanvas(canvas);
   _chartInstances[canvasId] = new Chart(canvas, config);
 }
 
@@ -143,46 +177,69 @@ function _baseChartOptions(win, yLabel) {
   };
 }
 
+function _bucketTimestamps(win) {
+  const fromMs = new Date(win.from).getTime();
+  const toMs = new Date(win.to).getTime();
+  const bucketMs = win.rollupSeconds * 1000;
+  const numBuckets = Math.max(2, Math.ceil((toMs - fromMs) / bucketMs) + 1);
+  const sortedTs = Array.from({ length: numBuckets }, (_, i) =>
+    new Date(Math.min(fromMs + i * bucketMs, toMs)).toISOString()
+  );
+  return { sortedTs, bucketMs };
+}
+
+function _mapPointsToBuckets(points, sortedTs, bucketMs) {
+  const halfBucket = bucketMs / 2;
+  const byMs = new Map(points.map((p) => [new Date(p.timestamp).getTime(), p.value]));
+  return sortedTs.map((ts) => {
+    const targetMs = new Date(ts).getTime();
+    let best = null;
+    let bestDelta = Infinity;
+    for (const [ptMs, val] of byMs) {
+      const delta = Math.abs(ptMs - targetMs);
+      if (delta <= halfBucket && delta < bestDelta) {
+        best = val;
+        bestDelta = delta;
+      }
+    }
+    return best;
+  });
+}
+
 /**
  * Fetch and render a multi-series line chart.
  *
  * @param {string} canvasId - ID of the <canvas> element.
  * @param {string} project  - Spyglass project name.
- * @param {Array}  seriesDefs - [{label, metricName, color, fill?, transform?}]
+ * @param {Array}  seriesDefs - [{label, metricName, color, fill?, transform?, tags?}]
  *   transform: (value: number) => number  (e.g. ms → s conversion)
  * @param {object} win      - {from, to, rollupSeconds} from _getTimeWindow()
  * @param {AbortSignal} signal
  */
 async function buildLineChart(canvasId, project, seriesDefs, win, signal) {
   const results = await Promise.allSettled(
-    seriesDefs.map((def) => fetchSeries(project, def.metricName, win, signal))
+    seriesDefs.map((def) => fetchSeries(project, def.metricName, win, signal, def.tags))
   );
 
-  // Generate the full requested time window as evenly-spaced buckets so the
-  // X-axis always spans win.from → win.to regardless of where data exists.
-  const fromMs = new Date(win.from).getTime();
-  const toMs   = new Date(win.to).getTime();
-  const bucketMs = win.rollupSeconds * 1000;
-  const numBuckets = Math.max(2, Math.ceil((toMs - fromMs) / bucketMs) + 1);
-  const sortedTs = Array.from({ length: numBuckets }, (_, i) =>
-    new Date(Math.min(fromMs + i * bucketMs, toMs)).toISOString()
-  );
-
+  const { sortedTs, bucketMs } = _bucketTimestamps(win);
   const halfBucket = bucketMs / 2;
 
   const datasets = seriesDefs.map((def, i) => {
     const points = results[i].status === "fulfilled" ? (results[i].value.points ?? []) : [];
-    // Key by ms so timestamp string precision differences don't cause misses.
     const byMs = new Map(points.map((p) => [new Date(p.timestamp).getTime(), p.value]));
     const transform = def.transform ?? ((v) => v);
     return {
       label: def.label,
       data: sortedTs.map((ts) => {
         const targetMs = new Date(ts).getTime();
-        let best = null, bestDelta = Infinity;
+        let best = null;
+        let bestDelta = Infinity;
         for (const [ptMs, val] of byMs) {
           const delta = Math.abs(ptMs - targetMs);
-          if (delta <= halfBucket && delta < bestDelta) { best = val; bestDelta = delta; }
+          if (delta <= halfBucket && delta < bestDelta) {
+            best = val;
+            bestDelta = delta;
+          }
         }
         return best != null ? transform(best) : null;
       }),
@@ -214,29 +271,11 @@ async function buildLineChart(canvasId, project, seriesDefs, win, signal) {
  * @param {object} win
  * @param {AbortSignal} signal
  */
-async function buildBarChart(canvasId, project, metricName, color, label, win, signal) {
-  const data = await fetchSeries(project, metricName, win, signal);
+async function buildBarChart(canvasId, project, metricName, color, label, win, signal, tags) {
+  const data = await fetchSeries(project, metricName, win, signal, tags);
   const points = data.points ?? [];
-
-  const fromMs = new Date(win.from).getTime();
-  const toMs   = new Date(win.to).getTime();
-  const bucketMs = win.rollupSeconds * 1000;
-  const numBuckets = Math.max(2, Math.ceil((toMs - fromMs) / bucketMs) + 1);
-  const sortedTs = Array.from({ length: numBuckets }, (_, i) =>
-    new Date(Math.min(fromMs + i * bucketMs, toMs)).toISOString()
-  );
-
-  const halfBucket = bucketMs / 2;
-  const byMs = new Map(points.map((p) => [new Date(p.timestamp).getTime(), p.value]));
-  const values = sortedTs.map((ts) => {
-    const targetMs = new Date(ts).getTime();
-    let best = null, bestDelta = Infinity;
-    for (const [ptMs, val] of byMs) {
-      const delta = Math.abs(ptMs - targetMs);
-      if (delta <= halfBucket && delta < bestDelta) { best = val; bestDelta = delta; }
-    }
-    return best;
-  });
+  const { sortedTs, bucketMs } = _bucketTimestamps(win);
+  const values = _mapPointsToBuckets(points, sortedTs, bucketMs);
 
   _upsertChart(canvasId, {
     type: "bar",
@@ -256,6 +295,45 @@ async function buildBarChart(canvasId, project, metricName, color, label, win, s
 }
 
 /**
+ * Fetch and render a stacked multi-series bar chart.
+ *
+ * @param {string} canvasId
+ * @param {string} project
+ * @param {Array}  seriesDefs - [{label, metricName, color, tags?}]
+ * @param {object} win
+ * @param {AbortSignal} signal
+ */
+async function buildStackedBarChart(canvasId, project, seriesDefs, win, signal) {
+  const results = await Promise.allSettled(
+    seriesDefs.map((def) => fetchSeries(project, def.metricName, win, signal, def.tags))
+  );
+  const { sortedTs, bucketMs } = _bucketTimestamps(win);
+
+  const datasets = seriesDefs.map((def, i) => {
+    const points = results[i].status === "fulfilled" ? (results[i].value.points ?? []) : [];
+    return {
+      label: def.label,
+      data: _mapPointsToBuckets(points, sortedTs, bucketMs),
+      backgroundColor: def.color,
+      borderColor: def.color,
+      borderWidth: 1,
+      borderRadius: 2,
+      stack: "stack",
+    };
+  });
+
+  const options = _baseChartOptions(win, "count");
+  options.scales.x.stacked = true;
+  options.scales.y.stacked = true;
+
+  _upsertChart(canvasId, {
+    type: "bar",
+    data: { labels: sortedTs, datasets },
+    options,
+  });
+}
+
+/**
  * Fetch summaries and fill stat elements.
  *
  * @param {string} project
@@ -268,7 +346,7 @@ async function buildBarChart(canvasId, project, metricName, color, label, win, s
  */
 async function fillStats(project, statDefs, win, signal) {
   const results = await Promise.allSettled(
-    statDefs.map((def) => fetchSummary(project, def.metricName, win, signal))
+    statDefs.map((def) => fetchSummary(project, def.metricName, win, signal, def.tags))
   );
 
   statDefs.forEach((def, i) => {
@@ -288,6 +366,39 @@ async function fillStats(project, statDefs, win, signal) {
       el.classList.toggle("stat-healthy", !isDanger && el.classList.contains("stat-danger-or-healthy"));
     }
   });
+}
+
+/**
+ * Fetch multiple summaries and fill one derived stat element.
+ *
+ * @param {string} project
+ * @param {object} def - {elementId, sources: [{metricName, tags?}], compute, format, danger?}
+ *   compute: (summaries) => number|null
+ *   danger:  (summaries, value) => boolean
+ * @param {object} win
+ * @param {AbortSignal} signal
+ */
+async function fillDerivedStat(project, def, win, signal) {
+  const results = await Promise.allSettled(
+    def.sources.map((src) => fetchSummary(project, src.metricName, win, signal, src.tags))
+  );
+  const el = document.getElementById(def.elementId);
+  if (!el) return;
+
+  const summaries = results.map((r) => (r.status === "fulfilled" ? r.value : null));
+  if (summaries.every((s) => s == null)) {
+    el.textContent = "—";
+    return;
+  }
+
+  const raw = def.compute(summaries);
+  const formatter = typeof def.format === "function" ? def.format : (fmt[def.format] ?? fmt.count);
+  el.textContent = formatter(raw);
+  if (def.danger) {
+    const isDanger = def.danger(summaries, raw);
+    el.classList.toggle("stat-danger", isDanger);
+    el.classList.toggle("stat-healthy", !isDanger && el.classList.contains("stat-danger-or-healthy"));
+  }
 }
 
 /* ── Log section ────────────────────────────────────────────────────── */
