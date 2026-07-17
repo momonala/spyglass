@@ -14,36 +14,24 @@
     <section class="card" aria-labelledby="displayHeading">
       <div class="card-header">
         <h2 id="displayHeading">Display (iPad)</h2>
-        <p class="card-subtitle">Outcome counts and freshness in window</p>
+        <p class="card-subtitle">Hard failures and availability in window</p>
       </div>
       <div class="stat-grid">
         <div class="stat">
-          <span class="stat-label">Fresh</span>
-          <span id="stat-fresh" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Stale (fallback)</span>
-          <span id="stat-fallback" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">No snapshot</span>
-          <span id="stat-no-snapshot" class="stat-value">—</span>
+          <span class="stat-label">Requests</span>
+          <span id="stat-display-requests" class="stat-value">—</span>
         </div>
         <div class="stat">
           <span class="stat-label">502 errors</span>
           <span id="stat-failed" class="stat-value">—</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Success rate</span>
-          <span id="stat-success-rate" class="stat-value stat-danger-or-healthy">—</span>
+          <span class="stat-label">Uptime</span>
+          <span id="stat-uptime" class="stat-value stat-danger-or-healthy">—</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Snapshot age</span>
-          <span id="stat-snapshot-age" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Seconds since fresh</span>
-          <span id="stat-seconds-since-fresh" class="stat-value">—</span>
+          <span class="stat-label">display_data p95</span>
+          <span id="stat-display-p95" class="stat-value">—</span>
         </div>
       </div>
     </section>
@@ -51,7 +39,7 @@
     <section class="card" aria-labelledby="vbbHeading">
       <div class="card-header">
         <h2 id="vbbHeading">VBB dependency</h2>
-        <p class="card-subtitle">Upstream API health</p>
+        <p class="card-subtitle">Live upstream departures (display + dashboard)</p>
       </div>
       <div class="stat-grid">
         <div class="stat">
@@ -63,12 +51,12 @@
           <span id="stat-vbb-success" class="stat-value">—</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Cache hits</span>
-          <span id="stat-cache-hits" class="stat-value">—</span>
+          <span class="stat-label">Success rate</span>
+          <span id="stat-vbb-success-rate" class="stat-value stat-danger-or-healthy">—</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Cache misses</span>
-          <span id="stat-cache-misses" class="stat-value">—</span>
+          <span class="stat-label">Fetch p95 (ok)</span>
+          <span id="stat-vbb-p95-ok" class="stat-value">—</span>
         </div>
         <div class="stat">
           <span class="stat-label">Fetch p95</span>
@@ -83,13 +71,13 @@
 
   </div>
 
-  <section class="card card-full" aria-labelledby="displayOutcomesHeading">
+  <section class="card card-full" aria-labelledby="displayOutagesHeading">
     <div class="card-header">
-      <h2 id="displayOutcomesHeading">Display outcomes</h2>
-      <p class="card-subtitle">Fresh vs fallback vs no snapshot vs 502 over time</p>
+      <h2 id="displayOutagesHeading">Display outages</h2>
+      <p class="card-subtitle">502 responses — board down when VBB fetch fails</p>
     </div>
     <div class="chart-card chart-card--inset">
-      <canvas id="chartDisplayOutcomes" aria-label="Display outcome counts over time"></canvas>
+      <canvas id="chartDisplayOutages" aria-label="Display 502 errors over time"></canvas>
     </div>
   </section>
 
@@ -126,26 +114,20 @@
 // Verify names against /dashboard/api/metrics/names?project=trainspotter if charts are empty.
 const PROJECT = "trainspotter";
 const M = {
-  stationsLatency:  `${PROJECT}.__enter__.stations`,
-  displayLatency:   `${PROJECT}.__enter__.display_data`,
-  vbbFetch:    `${PROJECT}._fetch_departures_from_vbb.vbb.fetch`,
-  vbbError:    `${PROJECT}._fetch_departures_from_vbb.vbb.error`,
-  vbbSuccess:  `${PROJECT}._fetch_departures_from_vbb.vbb.success`,
-  cacheHit:    `${PROJECT}.get_inbound_trains_cached.vbb.cache_hit`,
-  cacheMiss:   `${PROJECT}.get_inbound_trains_cached.vbb.cache_miss`,
-  displayFresh:           `${PROJECT}._fetch_display_departures.display.fresh`,
-  displayFallback:        `${PROJECT}._fetch_display_departures.display.fallback`,
-  displayNoSnapshot:      `${PROJECT}._fetch_display_departures.display.no_snapshot`,
-  displaySnapshotAge:     `${PROJECT}._fetch_display_departures.display.snapshot_age_seconds`,
-  displaySecondsSinceFresh: `${PROJECT}._fetch_display_departures.display.seconds_since_fresh`,
-  display502: `${PROJECT}.api_display_data.response.502`,
+  stationsLatency: `${PROJECT}.__enter__.stations`,
+  displayLatency:  `${PROJECT}.__enter__.display_data`,
+  vbbFetch:        `${PROJECT}._fetch_departures_from_vbb.vbb.fetch`,
+  vbbError:        `${PROJECT}._fetch_departures_from_vbb.vbb.error`,
+  vbbSuccess:      `${PROJECT}._fetch_departures_from_vbb.vbb.success`,
+  display502:      `${PROJECT}.api_display_data.response.502`,
 };
 
-const VBB_ERROR_KINDS = ["http_503", "timeout", "connection"];
+const VBB_ERROR_KINDS = ["http_502", "http_503", "timeout", "connection"];
 const VBB_ERROR_COLORS = {
-  http_503: COLORS.danger,
-  timeout: COLORS.warn,
-  connection: COLORS.purple,
+  http_502: COLORS.danger,
+  http_503: COLORS.warn,
+  timeout: COLORS.purple,
+  connection: COLORS.muted,
 };
 
 initDashboard({
@@ -157,12 +139,7 @@ initDashboard({
         { label: "display_data (ms)", metricName: M.displayLatency,  color: COLORS.purple },
       ], win, signal),
 
-      buildStackedBarChart("chartDisplayOutcomes", PROJECT, [
-        { label: "fresh",        metricName: M.displayFresh,      color: COLORS.success },
-        { label: "fallback",     metricName: M.displayFallback,   color: COLORS.warn },
-        { label: "no snapshot",  metricName: M.displayNoSnapshot, color: COLORS.danger },
-        { label: "502",          metricName: M.display502,        color: COLORS.muted },
-      ], win, signal),
+      buildBarChart("chartDisplayOutages", PROJECT, M.display502, COLORS.danger, "502", win, signal),
 
       buildStackedBarChart("chartVbbErrors", PROJECT,
         VBB_ERROR_KINDS.map((kind) => ({
@@ -179,43 +156,52 @@ initDashboard({
       ], win, signal),
 
       fillStats(PROJECT, [
-        { elementId: "stat-fresh",       metricName: M.displayFresh,      pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-fallback",    metricName: M.displayFallback,   pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-no-snapshot", metricName: M.displayNoSnapshot, pick: (s) => s.sum, format: "count",
+        { elementId: "stat-display-requests", metricName: M.displayLatency, pick: (s) => s.count, format: "count" },
+        { elementId: "stat-failed",           metricName: M.display502,     pick: (s) => s.sum, format: "count",
           danger: (s) => (s.sum ?? 0) > 0 },
-        { elementId: "stat-failed",      metricName: M.display502,        pick: (s) => s.sum, format: "count",
-          danger: (s) => (s.sum ?? 0) > 0 },
-        { elementId: "stat-snapshot-age", metricName: M.displaySnapshotAge,
-          pick: (s) => s.latest_value, format: "secondsValue" },
-        { elementId: "stat-seconds-since-fresh", metricName: M.displaySecondsSinceFresh,
-          pick: (s) => s.latest_value, format: "secondsValue" },
+        { elementId: "stat-display-p95",      metricName: M.displayLatency, pick: (s) => s.p95 ?? s.max, format: "ms" },
       ], win, signal),
 
       fillDerivedStat(PROJECT, {
-        elementId: "stat-success-rate",
+        elementId: "stat-uptime",
         sources: [
-          { metricName: M.displayFresh },
-          { metricName: M.displayFallback },
-          { metricName: M.displayNoSnapshot },
+          { metricName: M.displayLatency },
+          { metricName: M.display502 },
         ],
-        compute: ([fresh, fallback, noSnapshot]) => {
-          const f = fresh?.sum ?? 0;
-          const total = f + (fallback?.sum ?? 0) + (noSnapshot?.sum ?? 0);
-          return total > 0 ? (f / total) * 100 : null;
+        compute: ([display, errors]) => {
+          const total = display?.count ?? 0;
+          if (total <= 0) return null;
+          const failed = errors?.sum ?? 0;
+          return Math.max(0, (total - failed) / total) * 100;
         },
         format: "percent",
-        danger: (_summaries, value) => value != null && value < 50,
+        danger: (_summaries, value) => value != null && value < 95,
       }, win, signal),
 
       fillStats(PROJECT, [
-        { elementId: "stat-vbb-errors",   metricName: M.vbbError,  pick: (s) => s.sum, format: "count",
+        { elementId: "stat-vbb-errors",  metricName: M.vbbError,   pick: (s) => s.sum, format: "count",
           danger: (s) => (s.sum ?? 0) > 0 },
-        { elementId: "stat-vbb-success",  metricName: M.vbbSuccess, pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-cache-hits",   metricName: M.cacheHit,  pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-cache-misses", metricName: M.cacheMiss, pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-vbb-p95",      metricName: M.vbbFetch,  pick: (s) => s.p95 ?? s.max, format: "ms" },
-        { elementId: "stat-vbb-avg",      metricName: M.vbbFetch,  pick: (s) => s.avg, format: "ms" },
+        { elementId: "stat-vbb-success", metricName: M.vbbSuccess, pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-vbb-p95-ok", metricName: M.vbbFetch, pick: (s) => s.p95 ?? s.max, format: "ms",
+          tags: { outcome: "ok" } },
+        { elementId: "stat-vbb-p95",     metricName: M.vbbFetch, pick: (s) => s.p95 ?? s.max, format: "ms" },
+        { elementId: "stat-vbb-avg",     metricName: M.vbbFetch, pick: (s) => s.avg, format: "ms" },
       ], win, signal),
+
+      fillDerivedStat(PROJECT, {
+        elementId: "stat-vbb-success-rate",
+        sources: [
+          { metricName: M.vbbSuccess },
+          { metricName: M.vbbError },
+        ],
+        compute: ([success, error]) => {
+          const ok = success?.sum ?? 0;
+          const total = ok + (error?.sum ?? 0);
+          return total > 0 ? (ok / total) * 100 : null;
+        },
+        format: "percent",
+        danger: (_summaries, value) => value != null && value < 95,
+      }, win, signal),
     ]);
   },
 });
