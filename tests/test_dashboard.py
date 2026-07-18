@@ -494,9 +494,29 @@ def test_dashboard_series_tag_filter(client):
         f"/dashboard/api/metrics/series?project={project}&name={metric}&tag_kind=timeout"
     )
     assert resp.status_code == 200
-    points = resp.get_json()["points"]
+    body = resp.get_json()
+    assert body["metric_type"] == "counter"
+    points = body["points"]
     assert len(points) >= 1
     assert sum(p["value"] for p in points) == 9.0
+
+
+def test_dashboard_series_includes_metric_type(client):
+    project = "series-type"
+    counter = f"{project}.fn.writes"
+    timing = f"{project}.fn.latency"
+    _ingest_points(client, project, [
+        {"name": counter, "metric_type": "counter", "value": 4},
+        {"name": timing, "metric_type": "timing", "value": 12.5},
+    ])
+
+    counter_resp = client.get(f"/dashboard/api/metrics/series?project={project}&name={counter}")
+    assert counter_resp.status_code == 200
+    assert counter_resp.get_json()["metric_type"] == "counter"
+
+    timing_resp = client.get(f"/dashboard/api/metrics/series?project={project}&name={timing}")
+    assert timing_resp.status_code == 200
+    assert timing_resp.get_json()["metric_type"] == "timing"
 
 
 def test_dashboard_summary_timing_percentiles(client):

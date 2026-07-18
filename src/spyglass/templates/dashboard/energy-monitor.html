@@ -158,9 +158,9 @@ initDashboard({
       ], win, signal),
 
       fillStats(PROJECT, [
-        { elementId: "stat-interval-min", metricName: M.interval, pick: (s) => s.min, format: "ms" },
-        { elementId: "stat-interval-avg", metricName: M.interval, pick: (s) => s.avg, format: "ms" },
-        { elementId: "stat-interval-max", metricName: M.interval, pick: (s) => s.max, format: "ms" },
+        { elementId: "stat-interval-min", metricName: M.interval, pick: (s) => s.min, format: "seconds" },
+        { elementId: "stat-interval-avg", metricName: M.interval, pick: (s) => s.avg, format: "seconds" },
+        { elementId: "stat-interval-max", metricName: M.interval, pick: (s) => s.max, format: "seconds" },
       ], win, signal),
     ]);
   },

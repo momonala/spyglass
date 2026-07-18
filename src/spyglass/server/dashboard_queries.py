@@ -136,7 +136,7 @@ def query_metric_series(
         }
         for row in rows
     ]
-    return {"points": points}
+    return {"metric_type": metric_type, "points": points}
 
 
 def query_metric_summary(

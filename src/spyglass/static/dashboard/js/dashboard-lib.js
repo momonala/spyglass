@@ -188,7 +188,7 @@ function _bucketTimestamps(win) {
   return { sortedTs, bucketMs };
 }
 
-function _mapPointsToBuckets(points, sortedTs, bucketMs) {
+function _mapPointsToBuckets(points, sortedTs, bucketMs, missingValue = null) {
   const halfBucket = bucketMs / 2;
   const byMs = new Map(points.map((p) => [new Date(p.timestamp).getTime(), p.value]));
   return sortedTs.map((ts) => {
@@ -202,8 +202,14 @@ function _mapPointsToBuckets(points, sortedTs, bucketMs) {
         bestDelta = delta;
       }
     }
-    return best;
+    return best != null ? best : missingValue;
   });
+}
+
+/** Counters/sets with no samples in a bucket mean zero activity, not "unknown". */
+function _shouldZeroFillMissing(metricType, zeroFillOverride) {
+  if (zeroFillOverride != null) return Boolean(zeroFillOverride);
+  return metricType === "counter" || metricType === "set";
 }
 
 /**
@@ -211,8 +217,9 @@ function _mapPointsToBuckets(points, sortedTs, bucketMs) {
  *
  * @param {string} canvasId - ID of the <canvas> element.
  * @param {string} project  - Spyglass project name.
- * @param {Array}  seriesDefs - [{label, metricName, color, fill?, transform?, tags?}]
+ * @param {Array}  seriesDefs - [{label, metricName, color, fill?, transform?, tags?, zeroFill?}]
  *   transform: (value: number) => number  (e.g. ms → s conversion)
+ *   zeroFill: force empty buckets to 0 (default: auto for counter/set metrics)
  * @param {object} win      - {from, to, rollupSeconds} from _getTimeWindow()
  * @param {AbortSignal} signal
  */
@@ -222,34 +229,24 @@ async function buildLineChart(canvasId, project, seriesDefs, win, signal) {
   );
 
   const { sortedTs, bucketMs } = _bucketTimestamps(win);
-  const halfBucket = bucketMs / 2;
 
   const datasets = seriesDefs.map((def, i) => {
-    const points = results[i].status === "fulfilled" ? (results[i].value.points ?? []) : [];
-    const byMs = new Map(points.map((p) => [new Date(p.timestamp).getTime(), p.value]));
+    const payload = results[i].status === "fulfilled" ? results[i].value : null;
+    const points = payload?.points ?? [];
+    const zeroFill = _shouldZeroFillMissing(payload?.metric_type, def.zeroFill);
     const transform = def.transform ?? ((v) => v);
+    const values = _mapPointsToBuckets(points, sortedTs, bucketMs, zeroFill ? 0 : null);
     return {
       label: def.label,
-      data: sortedTs.map((ts) => {
-        const targetMs = new Date(ts).getTime();
-        let best = null;
-        let bestDelta = Infinity;
-        for (const [ptMs, val] of byMs) {
-          const delta = Math.abs(ptMs - targetMs);
-          if (delta <= halfBucket && delta < bestDelta) {
-            best = val;
-            bestDelta = delta;
-          }
-        }
-        return best != null ? transform(best) : null;
-      }),
+      data: values.map((v) => (v != null ? transform(v) : null)),
       borderColor: def.color,
       backgroundColor: def.fill ? `${def.color}26` : "transparent",
       fill: def.fill ?? false,
       tension: 0.25,
       pointRadius: 0,
       borderWidth: 1.5,
-      spanGaps: true,
+      // Span only when gaps are truly unknown (timings/gauges). Counter zeros are real points.
+      spanGaps: !zeroFill,
     };
   });
 
