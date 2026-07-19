@@ -130,9 +130,7 @@ def dashboard_metric_summary():
         abort(400, "name is required")
     from_ts, to_ts = _parse_window()
     return jsonify(
-        dashboard_queries.query_metric_summary(
-            _store(), project, name, from_ts, to_ts, _parse_tag_filters()
-        )
+        dashboard_queries.query_metric_summary(_store(), project, name, from_ts, to_ts, _parse_tag_filters())
     )
 
 

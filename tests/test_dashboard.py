@@ -466,18 +466,20 @@ def _ingest_points(client, project: str, points: list[dict]) -> None:
 def test_dashboard_summary_tag_filter(client):
     project = "tag-test"
     metric = f"{project}.fn.vbb.error"
-    _ingest_points(client, project, [
-        {"name": metric, "metric_type": "counter", "value": 5, "tags": {"kind": "http_503"}},
-        {"name": metric, "metric_type": "counter", "value": 2, "tags": {"kind": "timeout"}},
-    ])
+    _ingest_points(
+        client,
+        project,
+        [
+            {"name": metric, "metric_type": "counter", "value": 5, "tags": {"kind": "http_503"}},
+            {"name": metric, "metric_type": "counter", "value": 2, "tags": {"kind": "timeout"}},
+        ],
+    )
 
     all_resp = client.get(f"/dashboard/api/metrics/summary?project={project}&name={metric}")
     assert all_resp.status_code == 200
     assert all_resp.get_json()["sum"] == 7.0
 
-    filtered = client.get(
-        f"/dashboard/api/metrics/summary?project={project}&name={metric}&tag_kind=http_503"
-    )
+    filtered = client.get(f"/dashboard/api/metrics/summary?project={project}&name={metric}&tag_kind=http_503")
     assert filtered.status_code == 200
     assert filtered.get_json()["sum"] == 5.0
 
@@ -485,14 +487,16 @@ def test_dashboard_summary_tag_filter(client):
 def test_dashboard_series_tag_filter(client):
     project = "tag-series"
     metric = f"{project}.fn.vbb.error"
-    _ingest_points(client, project, [
-        {"name": metric, "metric_type": "counter", "value": 3, "tags": {"kind": "http_503"}},
-        {"name": metric, "metric_type": "counter", "value": 9, "tags": {"kind": "timeout"}},
-    ])
-
-    resp = client.get(
-        f"/dashboard/api/metrics/series?project={project}&name={metric}&tag_kind=timeout"
+    _ingest_points(
+        client,
+        project,
+        [
+            {"name": metric, "metric_type": "counter", "value": 3, "tags": {"kind": "http_503"}},
+            {"name": metric, "metric_type": "counter", "value": 9, "tags": {"kind": "timeout"}},
+        ],
     )
+
+    resp = client.get(f"/dashboard/api/metrics/series?project={project}&name={metric}&tag_kind=timeout")
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["metric_type"] == "counter"
@@ -505,10 +509,14 @@ def test_dashboard_series_includes_metric_type(client):
     project = "series-type"
     counter = f"{project}.fn.writes"
     timing = f"{project}.fn.latency"
-    _ingest_points(client, project, [
-        {"name": counter, "metric_type": "counter", "value": 4},
-        {"name": timing, "metric_type": "timing", "value": 12.5},
-    ])
+    _ingest_points(
+        client,
+        project,
+        [
+            {"name": counter, "metric_type": "counter", "value": 4},
+            {"name": timing, "metric_type": "timing", "value": 12.5},
+        ],
+    )
 
     counter_resp = client.get(f"/dashboard/api/metrics/series?project={project}&name={counter}")
     assert counter_resp.status_code == 200
@@ -522,11 +530,15 @@ def test_dashboard_series_includes_metric_type(client):
 def test_dashboard_summary_timing_percentiles(client):
     project = "timing-pct"
     metric = f"{project}.fn.vbb.fetch"
-    _ingest_points(client, project, [
-        {"name": metric, "metric_type": "timing", "value": 100},
-        {"name": metric, "metric_type": "timing", "value": 200},
-        {"name": metric, "metric_type": "timing", "value": 400},
-    ])
+    _ingest_points(
+        client,
+        project,
+        [
+            {"name": metric, "metric_type": "timing", "value": 100},
+            {"name": metric, "metric_type": "timing", "value": 200},
+            {"name": metric, "metric_type": "timing", "value": 400},
+        ],
+    )
 
     resp = client.get(f"/dashboard/api/metrics/summary?project={project}&name={metric}")
     assert resp.status_code == 200
@@ -540,15 +552,17 @@ def test_dashboard_summary_timing_percentiles(client):
 def test_dashboard_tag_values(client):
     project = "tag-values"
     metric = f"{project}.fn.vbb.error"
-    _ingest_points(client, project, [
-        {"name": metric, "metric_type": "counter", "value": 1, "tags": {"kind": "http_503"}},
-        {"name": metric, "metric_type": "counter", "value": 1, "tags": {"kind": "timeout"}},
-        {"name": metric, "metric_type": "counter", "value": 1, "tags": {"kind": "http_503"}},
-    ])
-
-    resp = client.get(
-        f"/dashboard/api/metrics/tag-values?project={project}&name={metric}&key=kind"
+    _ingest_points(
+        client,
+        project,
+        [
+            {"name": metric, "metric_type": "counter", "value": 1, "tags": {"kind": "http_503"}},
+            {"name": metric, "metric_type": "counter", "value": 1, "tags": {"kind": "timeout"}},
+            {"name": metric, "metric_type": "counter", "value": 1, "tags": {"kind": "http_503"}},
+        ],
     )
+
+    resp = client.get(f"/dashboard/api/metrics/tag-values?project={project}&name={metric}&key=kind")
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["key"] == "kind"

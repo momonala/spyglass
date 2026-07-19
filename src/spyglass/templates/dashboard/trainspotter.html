@@ -116,9 +116,9 @@ const PROJECT = "trainspotter";
 const M = {
   stationsLatency: `${PROJECT}.__enter__.stations`,
   displayLatency:  `${PROJECT}.__enter__.display_data`,
-  vbbFetch:        `${PROJECT}._fetch_departures_from_vbb.vbb.fetch`,
-  vbbError:        `${PROJECT}._fetch_departures_from_vbb.vbb.error`,
-  vbbSuccess:      `${PROJECT}._fetch_departures_from_vbb.vbb.success`,
+  vbbFetch:        `${PROJECT}.get_departures.vbb.fetch`,
+  vbbError:        `${PROJECT}.get_departures.vbb.error`,
+  vbbSuccess:      `${PROJECT}.get_departures.vbb.success`,
   display502:      `${PROJECT}.api_display_data.response.502`,
 };
 
