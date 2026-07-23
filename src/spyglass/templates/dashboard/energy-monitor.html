@@ -26,37 +26,61 @@
       </div>
     </section>
 
-    <section class="card" style="flex:2;min-width:0;" aria-labelledby="parityHeading">
-      <div class="card-header">
-        <h2 id="parityHeading">Parity</h2>
-        <p class="card-subtitle">Message and write counts in window</p>
-      </div>
-      <div class="stat-grid">
-        <div class="stat">
-          <span class="stat-label">MQTT received</span>
-          <span id="stat-mqtt" class="stat-value">—</span>
+    <div class="em-stat-col" style="flex:2;min-width:0;">
+      <section class="card" aria-labelledby="parityHeading">
+        <div class="card-header">
+          <h2 id="parityHeading">Parity</h2>
+          <p class="card-subtitle">Message and write counts in window</p>
         </div>
-        <div class="stat">
-          <span class="stat-label">DB saved</span>
-          <span id="stat-saved" class="stat-value">—</span>
+        <div class="stat-grid stat-grid--paired">
+          <div class="stat">
+            <span class="stat-label">MQTT received</span>
+            <span id="stat-mqtt" class="stat-value">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">DB saved</span>
+            <span id="stat-saved" class="stat-value">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Duplicates</span>
+            <span id="stat-dup" class="stat-value">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Save errors</span>
+            <span id="stat-err" class="stat-value">—</span>
+          </div>
         </div>
-        <div class="stat">
-          <span class="stat-label">Duplicates</span>
-          <span id="stat-dup" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Save errors</span>
-          <span id="stat-err" class="stat-value">—</span>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="card" style="flex:2;min-width:0;" aria-labelledby="downtimeHeading">
+      <section class="card" aria-labelledby="intervalHeading">
+        <div class="card-header">
+          <h2 id="intervalHeading">MQTT Interval</h2>
+          <p class="card-subtitle">Time between sensor messages</p>
+        </div>
+        <div class="stat-grid stat-grid--two-col">
+          <div class="stat">
+            <span class="stat-label">Min</span>
+            <span id="stat-interval-min" class="stat-value">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Max</span>
+            <span id="stat-interval-max" class="stat-value">—</span>
+          </div>
+          <div class="stat stat--wide">
+            <span class="stat-label">Avg</span>
+            <span id="stat-interval-avg" class="stat-value">—</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" style="flex:3;min-width:0;" aria-labelledby="downtimeHeading">
       <div class="card-header">
         <h2 id="downtimeHeading">Downtime</h2>
-        <p class="card-subtitle">Disconnect and error events in window</p>
+        <p class="card-subtitle">Disconnect, error events, and outage duration in window</p>
       </div>
       <div class="stat-grid">
+        <span class="stat-group-label">Events</span>
         <div class="stat">
           <span class="stat-label">Disconnects</span>
           <span id="stat-disconnects" class="stat-value">—</span>
@@ -77,26 +101,22 @@
           <span class="stat-label">Readings last hour</span>
           <span id="stat-last-hour" class="stat-value">—</span>
         </div>
-      </div>
-    </section>
-
-    <section class="card" style="flex:2;min-width:0;" aria-labelledby="intervalHeading">
-      <div class="card-header">
-        <h2 id="intervalHeading">MQTT Interval</h2>
-        <p class="card-subtitle">Time between sensor messages</p>
-      </div>
-      <div class="stat-grid">
+        <span class="stat-group-label">Outage duration</span>
         <div class="stat">
-          <span class="stat-label">Min</span>
-          <span id="stat-interval-min" class="stat-value">—</span>
+          <span class="stat-label">Recoveries</span>
+          <span id="stat-recoveries" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Total down</span>
+          <span id="stat-downtime-total" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Longest</span>
+          <span id="stat-downtime-max" class="stat-value">—</span>
         </div>
         <div class="stat">
           <span class="stat-label">Avg</span>
-          <span id="stat-interval-avg" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Max</span>
-          <span id="stat-interval-max" class="stat-value">—</span>
+          <span id="stat-downtime-avg" class="stat-value">—</span>
         </div>
       </div>
     </section>
@@ -120,12 +140,15 @@ const M = {
   lowReadings:   `${PROJECT}.log_db_health_check.db.health.low_readings`,
   lastHour:      `${PROJECT}.log_db_health_check.db.readings.last_hour`,
   interval:      `${PROJECT}.on_message.mqtt.sensor.interval_ms`,
+  deviceOnline:  `${PROJECT}.on_message.mqtt.device.online`,
+  downtime:      `${PROJECT}.on_message.mqtt.device.downtime_ms`,
 };
 
 initDashboard({
   project: PROJECT,
   defaultWindowAmount: 1,
   defaultWindowUnit: "days",
+  defaultRollupMinutes: 5,
   loadFn: async (win, signal) => {
     await Promise.allSettled([
       buildLineChart("chartDbWrites", PROJECT, [
@@ -155,6 +178,11 @@ initDashboard({
         { elementId: "stat-low",            metricName: M.lowReadings,   pick: (s) => s.sum, format: "count",
           danger: (s) => (s.sum ?? 0) > 0 },
         { elementId: "stat-last-hour",      metricName: M.lastHour,      pick: (s) => s.latest_value, format: "count" },
+        { elementId: "stat-recoveries",     metricName: M.deviceOnline,  pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-downtime-total", metricName: M.downtime,      pick: (s) => s.sum, format: "duration",
+          danger: (s) => (s.sum ?? 0) > 0 },
+        { elementId: "stat-downtime-max",   metricName: M.downtime,      pick: (s) => s.max, format: "duration" },
+        { elementId: "stat-downtime-avg",   metricName: M.downtime,      pick: (s) => s.avg, format: "duration" },
       ], win, signal),
 
       fillStats(PROJECT, [

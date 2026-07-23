@@ -627,6 +627,47 @@ h1 {
   align-items: stretch;
 }
 
+/* Stacks two compact stat cards vertically within one em-stat-row column. */
+.em-stat-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Two fixed columns filled top-to-bottom, so paired stats stack per column
+   (col 1 = first two stats, col 2 = next two) instead of flowing row-major. */
+.stat-grid--paired {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+}
+
+/* Fixed two columns; a .stat--wide child spans the full row (e.g. Min|Max, then Avg). */
+.stat-grid--two-col {
+  grid-template-columns: 1fr 1fr;
+}
+.stat-grid--two-col .stat--wide {
+  grid-column: 1 / -1;
+}
+
+/* Small caption dividing stat groups inside a single card. */
+.stat-group-label {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--label-tertiary);
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--glass-border);
+}
+.stat-group-label:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
 /* ── Sidebar ───────────────────────────────────────────── */
 
 .sidebar {

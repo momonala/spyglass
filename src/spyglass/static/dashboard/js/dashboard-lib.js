@@ -30,6 +30,17 @@ const fmt = {
   ms:        (n) => n == null ? "—" : `${n.toFixed(1)} ms`,
   seconds:   (n) => n == null ? "—" : `${(n / 1000).toFixed(2).replace(/\.?0+$/, "")} s`,
   secondsValue: (n) => n == null ? "—" : `${Math.round(n)} s`,
+  duration:  (ms) => {
+    if (ms == null) return "—";
+    const total = Math.round(ms / 1000);
+    if (total === 0) return "0s";
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const mins = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    const parts = [["d", days], ["h", hours], ["m", mins], ["s", secs]].filter(([, v]) => v > 0);
+    return parts.slice(0, 2).map(([u, v]) => `${v}${u}`).join(" ");
+  },
   percent:   (n) => n == null ? "—" : `${n.toFixed(1)}%`,
   timestamp: (iso) => {
     if (!iso) return "—";
@@ -876,12 +887,15 @@ function _clearError() {
  *   Called each refresh. Should call buildLineChart / fillStats for project sections.
  * @param {number}   [config.defaultWindowAmount=6]
  * @param {string}   [config.defaultWindowUnit="hours"]
+ * @param {number}   [config.defaultRollupMinutes] - preselect the rollup window (minutes)
  */
-function initDashboard({ project, loadFn, defaultWindowAmount = 1, defaultWindowUnit = "days" }) {
+function initDashboard({ project, loadFn, defaultWindowAmount = 1, defaultWindowUnit = "days", defaultRollupMinutes }) {
   const amountEl = document.getElementById("windowAmount");
   const unitEl = document.getElementById("windowUnit");
+  const rollupEl = document.getElementById("rollupWindow");
   if (amountEl) amountEl.value = defaultWindowAmount;
   if (unitEl) unitEl.value = defaultWindowUnit;
+  if (rollupEl && defaultRollupMinutes != null) rollupEl.value = String(defaultRollupMinutes);
 
   _initLogSection();
 
