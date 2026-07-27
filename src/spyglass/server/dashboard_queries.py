@@ -57,6 +57,31 @@ def _tag_filter_clauses(tags: dict[str, str] | None) -> list[Any]:
     return [func.json_extract(MetricPoint.tags, f"$.{key}") == value for key, value in tags.items()]
 
 
+def _select_values_stmt(
+    name: str, from_ts: datetime, to_ts: datetime, tag_clauses: list[Any]
+) -> Any:
+    """Build a SELECT for a metric's raw values within a time window."""
+    return (
+        select(MetricPoint.value)
+        .where(MetricPoint.name == name)
+        .where(MetricPoint.timestamp >= from_ts)
+        .where(MetricPoint.timestamp <= to_ts)
+        .where(*tag_clauses)
+    )
+
+
+def _equal_width_bin_edges(lo: float, width: float, bins: int) -> list[float]:
+    return [lo + i * width for i in range(bins + 1)]
+
+
+def _bin_value_counts(values: list[float], lo: float, width: float, bins: int) -> list[int]:
+    """Assign each value to one of `bins` equal-width buckets starting at `lo`."""
+    counts = [0] * bins
+    for v in values:
+        counts[min(int((v - lo) / width), bins - 1)] += 1
+    return counts
+
+
 def _timing_percentiles(values: list[float]) -> dict[str, float | int | None]:
     """Compute count/p50/p95 over sorted timing values."""
     if not values:
@@ -177,8 +202,9 @@ def query_metric_summary(
         agg = session.execute(agg_stmt).one_or_none()
         timing_values: list[float] | None = None
         if metric_type == MetricType.TIMING.value:
-            timing_stmt = select(MetricPoint.value).where(*window_filter)
-            timing_values = [float(v) for v in session.execute(timing_stmt).scalars().all()]
+            timing_values = [
+                float(v) for v in session.execute(_select_values_stmt(name, from_ts, to_ts, tag_clauses)).scalars()
+            ]
 
     total = agg.total if agg else None
     minimum = agg.minimum if agg else None
@@ -227,6 +253,38 @@ def query_metric_tag_values(
     return {"key": key, "values": values}
 
 
+def query_metric_histogram_multi(
+    store: ProjectStore,
+    project: str,
+    names: list[str],
+    from_ts: datetime,
+    to_ts: datetime,
+    bins: int = DEFAULT_HISTOGRAM_BINS,
+    tags: dict[str, str] | None = None,
+) -> dict:
+    """Return equal-width histogram bins shared across several metrics, one count series per metric."""
+    slug = store.get_slug(project)
+    tag_clauses = _tag_filter_clauses(tags)
+
+    with store.metrics_session(slug) as session:
+        values_by_name = {
+            name: [float(v) for v in session.execute(_select_values_stmt(name, from_ts, to_ts, tag_clauses)).scalars()]
+            for name in names
+        }
+
+    all_values = [v for values in values_by_name.values() for v in values]
+    if not all_values:
+        return {"bins": bins, "edges": [], "series": [{"name": name, "counts": []} for name in names]}
+
+    lo, hi = min(all_values), max(all_values)
+    width = (hi - lo) / bins if hi > lo else 1.0
+    edges = _equal_width_bin_edges(lo, width, bins)
+    series = [
+        {"name": name, "counts": _bin_value_counts(values_by_name[name], lo, width, bins)} for name in names
+    ]
+    return {"bins": bins, "edges": edges, "series": series}
+
+
 def query_metric_histogram(
     store: ProjectStore,
     project: str,
@@ -236,33 +294,10 @@ def query_metric_histogram(
     bins: int = DEFAULT_HISTOGRAM_BINS,
     tags: dict[str, str] | None = None,
 ) -> dict:
-    """Return equal-width histogram bins for timing metric values."""
-    slug = store.get_slug(project)
-
-    stmt = (
-        select(MetricPoint.value)
-        .where(MetricPoint.name == name)
-        .where(MetricPoint.timestamp >= from_ts)
-        .where(MetricPoint.timestamp <= to_ts)
-        .where(*_tag_filter_clauses(tags))
-        .order_by(MetricPoint.timestamp)
-    )
-
-    with store.metrics_session(slug) as session:
-        values = [float(v) for v in session.execute(stmt).scalars().all()]
-
-    if not values:
-        return {"bins": bins, "edges": [], "counts": []}
-
-    lo = min(values)
-    hi = max(values)
-    width = (hi - lo) / bins if hi > lo else 1.0
-    counts = [0] * bins
-    for v in values:
-        counts[min(int((v - lo) / width), bins - 1)] += 1
-
-    edges = [lo + i * width for i in range(bins + 1)]
-    return {"bins": bins, "edges": edges, "counts": counts}
+    """Return equal-width histogram bins for one metric's values (single-metric case of query_metric_histogram_multi)."""
+    multi = query_metric_histogram_multi(store, project, [name], from_ts, to_ts, bins, tags)
+    counts = multi["series"][0]["counts"] if multi["series"] else []
+    return {"bins": multi["bins"], "edges": multi["edges"], "counts": counts}
 
 
 def _layout_path(project_dir: Path) -> Path:

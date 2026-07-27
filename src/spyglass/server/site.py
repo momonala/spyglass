@@ -1,7 +1,7 @@
 """Dashboard site blueprint: static UI and dashboard-specific JSON API."""
 
-import os
 import re
+from pathlib import Path
 
 from flask import Blueprint
 from flask import abort
@@ -27,7 +27,7 @@ site = Blueprint(
 
 _VALID_PROJECT = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
-_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "../templates/dashboard")
+_TEMPLATE_DIR = Path(__file__).parent.parent / "templates" / "dashboard"
 
 
 def _store() -> ProjectStore:
@@ -57,11 +57,19 @@ def _parse_tag_filters() -> dict[str, str]:
     return tags
 
 
+def _parse_bins() -> int:
+    raw_bins = request.args.get("bins")
+    if not raw_bins:
+        return DEFAULT_HISTOGRAM_BINS
+    try:
+        return int(raw_bins)
+    except ValueError:
+        abort(400, "bins must be an integer")
+
+
 def _list_project_templates() -> list[str]:
     return sorted(
-        os.path.splitext(f)[0]
-        for f in os.listdir(_TEMPLATE_DIR)
-        if f.endswith(".html") and not f.startswith("_") and f != "index.html"
+        f.stem for f in _TEMPLATE_DIR.glob("*.html") if not f.name.startswith("_") and f.name != "index.html"
     )
 
 
@@ -153,16 +161,23 @@ def dashboard_metric_histogram():
     if not name:
         abort(400, "name is required")
     from_ts, to_ts = _parse_window()
-    bins = DEFAULT_HISTOGRAM_BINS
-    raw_bins = request.args.get("bins")
-    if raw_bins:
-        try:
-            bins = int(raw_bins)
-        except ValueError:
-            abort(400, "bins must be an integer")
     return jsonify(
         dashboard_queries.query_metric_histogram(
-            _store(), project, name, from_ts, to_ts, bins, _parse_tag_filters()
+            _store(), project, name, from_ts, to_ts, _parse_bins(), _parse_tag_filters()
+        )
+    )
+
+
+@site.get("/dashboard/api/metrics/histogram-multi")
+def dashboard_metric_histogram_multi():
+    project = _require_project()
+    names = request.args.getlist("name")
+    if not names:
+        abort(400, "name is required")
+    from_ts, to_ts = _parse_window()
+    return jsonify(
+        dashboard_queries.query_metric_histogram_multi(
+            _store(), project, names, from_ts, to_ts, _parse_bins(), _parse_tag_filters()
         )
     )
 

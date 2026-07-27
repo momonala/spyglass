@@ -1,0 +1,204 @@
+{% extends "dashboard/_base.html" %}
+
+{% block title %}incognita{% endblock %}
+
+{% block sections %}
+
+  <div class="card-full ts-top-row ts-top-row--two">
+
+    <div class="chart-card">
+      <h3 class="chart-title">API latency</h3>
+      <canvas id="chartLatency" aria-label="API request latency over time"></canvas>
+    </div>
+
+    <section class="card" aria-labelledby="ingestHeading">
+      <div class="card-header">
+        <h2 id="ingestHeading">Ingest &amp; DB writes</h2>
+        <p class="card-subtitle">Files/batches received and SQLite write reliability in window</p>
+      </div>
+      <div class="stat-grid stat-grid--two-col">
+        <div class="stat">
+          <span class="stat-label">GPS files received</span>
+          <span id="stat-files-received" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">GPS write success rate</span>
+          <span id="stat-gps-success-rate" class="stat-value stat-danger-or-healthy">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Duplicates skipped</span>
+          <span id="stat-duplicate-skipped" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">GPS write errors</span>
+          <span id="stat-gps-errors" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Health batches received</span>
+          <span id="stat-batches-received" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Health write success rate</span>
+          <span id="stat-health-success-rate" class="stat-value stat-danger-or-healthy">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Health validation errors</span>
+          <span id="stat-validation-error" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Health write errors</span>
+          <span id="stat-health-errors" class="stat-value">—</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <section class="card card-full" aria-labelledby="dbWritesHeading">
+    <div class="card-header">
+      <h2 id="dbWritesHeading">DB Writes</h2>
+      <p class="card-subtitle">GPS files and HealthKit batches successfully written to SQLite over time</p>
+    </div>
+    <div class="chart-card chart-card--inset">
+      <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
+    </div>
+  </section>
+
+  <div class="card-full chart-grid">
+
+    <section class="card" aria-labelledby="fnCpuHeading">
+      <div class="card-header">
+        <h2 id="fnCpuHeading">Function CPU time</h2>
+        <p class="card-subtitle">Distribution of wall time per call across GPS-rendering functions (s)</p>
+      </div>
+      <div class="chart-card chart-card--inset">
+        <canvas id="histFnDuration" aria-label="Function CPU time distribution"></canvas>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="fnRamHeading">
+      <div class="card-header">
+        <h2 id="fnRamHeading">Function RAM usage</h2>
+        <p class="card-subtitle">Distribution of RSS memory change per call across GPS-rendering functions (MB)</p>
+      </div>
+      <div class="chart-card chart-card--inset">
+        <canvas id="histFnMem" aria-label="Function RAM usage distribution"></canvas>
+      </div>
+    </section>
+
+  </div>
+
+{% endblock %}
+
+{% block script %}
+<script>
+// Metric naming: {project}.{caller_function}.{stat}
+// The @timed decorator (incognita.observability) builds its own name manually
+// (prefix=False) so the decorated function's name appears instead of "wrapper".
+// Verify names against /dashboard/api/metrics/names?project=incognita if charts are empty.
+const PROJECT = "incognita";
+const M = {
+  apiDump:      `${PROJECT}._spyglass_request_end.api.dump.latency_ms`,
+  apiIosDump:   `${PROJECT}._spyglass_request_end.api.ios_dump.latency_ms`,
+  apiGps:       `${PROJECT}._spyglass_request_end.api.gps.latency_ms`,
+  apiLive:      `${PROJECT}._spyglass_request_end.api.live.latency_ms`,
+
+  filesReceived:     `${PROJECT}.dump.files_received`,
+  duplicateSkipped:  `${PROJECT}.dump.duplicate_skipped`,
+  batchesReceived:   `${PROJECT}.ios_dump.batches_received`,
+  validationError:   `${PROJECT}.ios_dump.validation_error`,
+
+  gpsDbSuccess:    `${PROJECT}.update_db.success`,
+  gpsDbError:      `${PROJECT}.update_db.error`,
+  healthDbSuccess: `${PROJECT}.insert_health_batch.success`,
+  healthDbError:   `${PROJECT}.insert_health_batch.error`,
+
+  fnDurationGpsDeck:    `${PROJECT}.gps_df_to_deck_map.duration_ms`,
+  fnDurationMonthTrips: `${PROJECT}._get_month_trips_cached_impl.duration_ms`,
+  fnDurationTripPoints: `${PROJECT}.get_trip_points_for_date_range.duration_ms`,
+  fnDurationTrips:      `${PROJECT}.get_trips_for_date_range.duration_ms`,
+
+  fnMemGpsDeck:    `${PROJECT}.gps_df_to_deck_map.mem_delta_mb`,
+  fnMemMonthTrips: `${PROJECT}._get_month_trips_cached_impl.mem_delta_mb`,
+  fnMemTripPoints: `${PROJECT}.get_trip_points_for_date_range.mem_delta_mb`,
+  fnMemTrips:      `${PROJECT}.get_trips_for_date_range.mem_delta_mb`,
+};
+
+initDashboard({
+  project: PROJECT,
+  defaultWindowAmount: 1,
+  defaultWindowUnit: "days",
+  defaultRollupMinutes: 10,
+  loadFn: async (win, signal) => {
+    await Promise.allSettled([
+      buildLineChart("chartLatency", PROJECT, [
+        { label: "dump (ms)",     metricName: M.apiDump,    color: COLORS.accent,  axisLabel: "ms" },
+        { label: "ios_dump (ms)", metricName: M.apiIosDump, color: COLORS.purple, axisLabel: "ms" },
+        { label: "live (ms)",     metricName: M.apiLive,    color: COLORS.warn,   axisLabel: "ms" },
+        // gps can spike into the tens/hundreds of seconds — plot on its own right-hand axis
+        // so it doesn't flatten the millisecond-scale endpoints above.
+        { label: "gps (s)", metricName: M.apiGps, color: COLORS.success, axis: "y1", axisLabel: "s", transform: (ms) => ms / 1000 },
+      ], win, signal),
+
+      buildLineChart("chartDbWrites", PROJECT, [
+        { label: "GPS writes",    metricName: M.gpsDbSuccess,    color: COLORS.success, fill: true },
+        { label: "Health writes", metricName: M.healthDbSuccess, color: COLORS.accent,  fill: true },
+      ], win, signal),
+
+      buildHistogramChart("histFnDuration", PROJECT, [
+        { label: "gps_df_to_deck_map",             metricName: M.fnDurationGpsDeck,    color: COLORS.accent },
+        { label: "_get_month_trips_cached_impl",   metricName: M.fnDurationMonthTrips, color: COLORS.purple },
+        { label: "get_trip_points_for_date_range", metricName: M.fnDurationTripPoints, color: COLORS.warn },
+        { label: "get_trips_for_date_range",       metricName: M.fnDurationTrips,      color: COLORS.muted },
+      ], win, signal, { bins: 10, unit: "s", transform: (ms) => ms / 1000 }),
+
+      buildHistogramChart("histFnMem", PROJECT, [
+        { label: "gps_df_to_deck_map",             metricName: M.fnMemGpsDeck,    color: COLORS.accent },
+        { label: "_get_month_trips_cached_impl",   metricName: M.fnMemMonthTrips, color: COLORS.purple },
+        { label: "get_trip_points_for_date_range", metricName: M.fnMemTripPoints, color: COLORS.warn },
+        { label: "get_trips_for_date_range",       metricName: M.fnMemTrips,      color: COLORS.muted },
+      ], win, signal, { bins: 10, unit: "MB" }),
+
+      fillDerivedStat(PROJECT, {
+        elementId: "stat-gps-success-rate",
+        sources: [{ metricName: M.gpsDbSuccess }, { metricName: M.gpsDbError }],
+        compute: ([success, error]) => {
+          const ok = success?.sum ?? 0;
+          const total = ok + (error?.sum ?? 0);
+          return total > 0 ? (ok / total) * 100 : null;
+        },
+        format: "percent",
+        danger: (_summaries, value) => value != null && value < 95,
+      }, win, signal),
+
+      fillDerivedStat(PROJECT, {
+        elementId: "stat-health-success-rate",
+        sources: [{ metricName: M.healthDbSuccess }, { metricName: M.healthDbError }],
+        compute: ([success, error]) => {
+          const ok = success?.sum ?? 0;
+          const total = ok + (error?.sum ?? 0);
+          return total > 0 ? (ok / total) * 100 : null;
+        },
+        format: "percent",
+        danger: (_summaries, value) => value != null && value < 95,
+      }, win, signal),
+
+      fillStats(PROJECT, [
+        { elementId: "stat-gps-errors",    metricName: M.gpsDbError,    pick: (s) => s.sum, format: "count",
+          danger: (s) => (s.sum ?? 0) > 0 },
+        { elementId: "stat-health-errors", metricName: M.healthDbError, pick: (s) => s.sum, format: "count",
+          danger: (s) => (s.sum ?? 0) > 0 },
+      ], win, signal),
+
+      fillStats(PROJECT, [
+        { elementId: "stat-files-received",    metricName: M.filesReceived,    pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-duplicate-skipped", metricName: M.duplicateSkipped, pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-batches-received",  metricName: M.batchesReceived,  pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-validation-error",  metricName: M.validationError,  pick: (s) => s.sum, format: "count",
+          danger: (s) => (s.sum ?? 0) > 0 },
+      ], win, signal),
+    ]);
+  },
+});
+</script>
+{% endblock %}

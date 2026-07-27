@@ -4,6 +4,9 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+from sqlalchemy import func
+from sqlalchemy import select
+
 from spyglass.db.models import LogEntry
 from spyglass.db.models import MetricPoint
 from spyglass.db.store import ProjectStore
@@ -29,17 +32,11 @@ def _insert_log(store: ProjectStore, slug: str, days_old: int) -> None:
 
 
 def _count_metrics(store: ProjectStore, slug: str) -> int:
-    from sqlalchemy import func
-    from sqlalchemy import select
-
     with store.metrics_session(slug) as session:
         return session.execute(select(func.count()).select_from(MetricPoint)).scalar()
 
 
 def _count_logs(store: ProjectStore, slug: str) -> int:
-    from sqlalchemy import func
-    from sqlalchemy import select
-
     with store.logs_session(slug) as session:
         return session.execute(select(func.count()).select_from(LogEntry)).scalar()
 

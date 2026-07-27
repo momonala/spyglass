@@ -2,22 +2,21 @@
 
 [![CI](https://github.com/momonala/spyglass/actions/workflows/ci.yml/badge.svg)](https://github.com/momonala/spyglass/actions/workflows/ci.yml)
 
-Lightweight metrics and log collection for small Python services. Apps emit data through a client SDK; a local Flask server stores raw points in per-project SQLite files under `data/`.
+Metrics and log collection for small Python services, with a hosted dashboard UI. Apps emit data through a client SDK; a Flask server ingests it into per-project SQLite files and serves a dashboard at `/dashboard/{project}`.
 
-**Last updated:** 2026-05-25 
+**Last updated:** 2026-07-27
 
 ## What this solves
 
-You need basic observability (counters, gauges, timings, sets, and application logs) without running Datadog or a full metrics stack. Spyglass gives you:
-
 - A **Python SDK** that sends metrics and logs over HTTP (fire-and-forget; failures do not break your app).
-- A **single Flask server** that ingests and queries data.
-- **Filesystem isolation** per project: `data/{project-slug}/metrics.db` and `logs.db`.
+- A **single Flask server** that ingests data, stores it, and serves a dashboard UI per project.
+- **Filesystem isolation** per project: `data/{project-slug}/metrics.db`, `logs.db`, `settings.json`, `dashboard.json`.
 
 ## Prerequisites
 
 - Python 3.12+
 - [uv](https://github.com/astral-sh/uv)
+- Node.js (only to run the dashboard JS tests, `tests/*.mjs`)
 
 ## Quick start
 
@@ -27,6 +26,8 @@ Install dependencies and start the server:
 uv sync
 uv run spyglass
 ```
+
+Open `http://localhost:5013/dashboard/` — lists any registered project that has a template under `src/spyglass/templates/dashboard/`.
 
 In another terminal, instrument an app (project name is **required**):
 
@@ -43,7 +44,7 @@ def handle_request():
     logger.info("handled request")
 ```
 
-Query stored data:
+Query stored data directly:
 
 ```bash
 curl "http://localhost:5013/metrics?project=my-api&limit=10"
@@ -56,7 +57,7 @@ Run **one Spyglass server** on your machine. Point **each app** at it with a dis
 
 ### 1. Install the server (this repo)
 
-Clone once and install the CLI as a uv tool so `spyglass serve` is available globally:
+Clone once and install the CLI as a uv tool so `spyglass` is available globally:
 
 ```bash
 git clone <your-spyglass-repo-url> ~/code/spyglass
@@ -65,10 +66,10 @@ uv sync
 uv tool install --editable .
 ```
 
-Start the server (uses `[tool.config]` in this repo’s `pyproject.toml`):
+Start the server (uses `[tool.config]` in this repo's `pyproject.toml`):
 
 ```bash
-spyglass serve
+spyglass
 spyglass --port 5013
 ```
 
@@ -90,23 +91,17 @@ uv add --editable ~/code/spyglass
 uv sync
 ```
 
-That adds a path dependency in `pyproject.toml`:
+Or as a git dependency (see `[tool.uv.sources]` in any consumer repo, e.g. `energy-monitor`, `trainspotter`, `incognita`):
 
 ```toml
 [project]
-dependencies = [
-    "spyglass",
-]
+dependencies = ["spyglass"]
 
 [tool.uv.sources]
-spyglass = { path = "/Users/you/code/spyglass", editable = true }
+spyglass = { git = "https://github.com/momonala/spyglass.git", rev = "main" }
 ```
 
-Use the **same path** you cloned to; uv resolves it on `uv sync`.
-
 ### 3. Instrument each app with a unique `project`
-
-Each app must pass its own `project` string (not shared across apps):
 
 ```python
 from spyglass import initialize
@@ -114,15 +109,10 @@ from spyglass import initialize
 logger, metrics = initialize(host="localhost:5013", project="my-api")
 ```
 
-Examples for several repos:
-
 | Application repo | `project=` value | Data on server |
 |------------------|------------------|----------------|
 | `~/code/my-api` | `"my-api"` | `data/my-api/` |
 | `~/code/worker` | `"worker"` | `data/worker/` |
-| `~/code/billing` | `"billing"` | `data/billing/` |
-
-Run the app with uv as usual (`uv run python app.py`, `uv run pytest`, etc.). The SDK is a normal dependency in that environment.
 
 ### 4. Verify
 
@@ -133,13 +123,12 @@ curl "http://localhost:5013/metrics?project=my-api&limit=5"
 
 ### Notes
 
-- **Server vs SDK:** `uv tool install` is only for the machine-wide `spyglass serve` command. App repos use `uv add --editable` for imports only; they do not need to run the server themselves.
+- **Server vs SDK:** `uv tool install` is only for the machine-wide `spyglass` server command. App repos add the SDK as a normal (or editable/git) dependency for imports only; they do not run the server themselves.
 - **Path dependency:** If you move the spyglass clone, re-run `uv add --editable <new-path>` in each app (or update `[tool.uv.sources]`).
-- **Publishing later:** When this package is on PyPI, app repos can use `uv add spyglass` instead of a path source; the instrumentation code stays the same.
 
 ## Configuration
 
-Non-secret settings live in `pyproject.toml` under `[tool.config]`:
+Non-secret settings live in `pyproject.toml` under `[tool.config]`, loaded by `spyglass._config.CONFIG`:
 
 ```toml
 [tool.config]
@@ -149,19 +138,19 @@ port = 5013
 retention_days = 30     # default; overridable per project at registration
 ```
 
-Secrets (optional for v1; reserved for future Flask session use) go in `.env`:
+Secrets go in `.env` (loaded via `python-dotenv` in `src/env.py`):
 
 ```bash
 cp .env.example .env
 ```
 
 ```python
-from src.env import FLASK_SECRET_KEY  # loaded via python-dotenv
+from src.env import TELEGRAM_API_TOKEN
 ```
 
 Runtime data under `data/` is gitignored.
 
-Legacy template CLI (project metadata from `pyproject.toml`):
+Legacy template CLI (project metadata from `pyproject.toml`, unrelated to the dashboard):
 
 ```bash
 uv run spyglass-config --project-name
@@ -173,47 +162,69 @@ uv run spyglass-config --all
 ```
 spyglass/
 ├── pyproject.toml
+├── alembic.ini
+├── alembic/versions/            # metrics + logs schema migrations (two independent branches)
 ├── src/
 │   ├── spyglass/
-│   │   ├── __init__.py          # MetricsCollector, configure_logging
-│   │   ├── cli.py               # spyglass serve
+│   │   ├── __init__.py          # public exports: initialize, MetricsCollector, configure_logging
+│   │   ├── cli.py               # `spyglass` server entrypoint
 │   │   ├── _config.py           # loads [tool.config]
 │   │   ├── client/
-│   │   │   ├── collector.py     # metrics SDK
+│   │   │   ├── collector.py     # MetricsCollector (metrics SDK)
 │   │   │   ├── logging.py       # SpyglassHandler + configure_logging
-│   │   │   └── query.py         # SpyglassQueryClient
-│   │   ├── dashboard/
+│   │   │   ├── initialize.py    # initialize() — logger + MetricsCollector in one call
+│   │   │   └── query.py         # SpyglassQueryClient — low-level HTTP fetch, unused by hosted dashboards
+│   │   ├── dashboard/           # legacy aggregation library — unused by hosted dashboards, see below
 │   │   │   ├── aggregate.py     # TimeWindow, counter_series, timing_*, etc.
-│   │   │   ├── builder.py       # SummaryBuilder — high-level aggregation
+│   │   │   ├── builder.py       # SummaryBuilder
 │   │   │   ├── config.py        # MetricSelector, ChartDefinition, StateTransitionRule
 │   │   │   └── schemas.py       # SummaryResponse and related types
 │   │   ├── server/
-│   │   │   ├── app.py           # Flask factory
-│   │   │   ├── routes.py        # ingest/query API
+│   │   │   ├── app.py           # Flask factory; registers api + site blueprints
+│   │   │   ├── routes.py        # ingest/query API blueprint (/metrics, /logs, /projects/register)
+│   │   │   ├── site.py          # dashboard UI blueprint (/dashboard/*)
+│   │   │   ├── dashboard_queries.py  # SQLAlchemy aggregation backing the dashboard JSON API
+│   │   │   ├── util.py          # timestamp parsing helpers
 │   │   │   └── retention.py     # schedule + background thread
-│   │   └── db/
-│   │       ├── models.py        # MetricPoint, LogEntry (timestamp PK)
-│   │       └── store.py         # per-project SQLite routing
+│   │   ├── db/
+│   │   │   ├── models.py        # MetricPoint, LogEntry (timestamp PK)
+│   │   │   └── store.py         # per-project SQLite routing + lazy alembic migration
+│   │   ├── templates/dashboard/
+│   │   │   ├── _base.html       # shared shell: sidebar, header controls, log section
+│   │   │   ├── index.html       # /dashboard/ project list
+│   │   │   ├── energy-monitor.html
+│   │   │   ├── trainspotter.html
+│   │   │   └── incognita.html
+│   │   └── static/dashboard/
+│   │       ├── css/{shared,components}.css
+│   │       └── js/dashboard-lib.js  # chart builders, stat fillers, log section, initDashboard()
 │   ├── config.py                # legacy Typer config CLI
 │   └── env.py                   # .env secrets
-├── tests/
+├── docs/                        # per-project dashboard change logs (e.g. trainspotter-dashboard-handoff.md)
+├── tests/                       # pytest (Python) + tests/*.mjs (dashboard-lib.js, run with `node --test`)
 └── data/                        # created at runtime (not in git)
     └── {project-slug}/
         ├── metrics.db
         ├── logs.db
-        └── settings.json        # per-project retention_days
+        ├── settings.json        # per-project retention_days
+        └── dashboard.json       # optional saved widget layout (see Dashboard API)
 ```
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph apps [InstrumentedApps]
+    subgraph apps [Instrumented apps]
         MC[MetricsCollector]
         LOG[logging + SpyglassHandler]
     end
-    subgraph server [FlaskServer]
-        API["/metrics /logs"]
+    subgraph browser [Browser]
+        UI[Dashboard UI / dashboard-lib.js]
+    end
+    subgraph server [Flask server]
+        API["api blueprint: /metrics /logs"]
+        SITE["site blueprint: /dashboard/*"]
+        DQ[dashboard_queries.py]
         RET[RetentionJob]
     end
     subgraph storage [data per project]
@@ -222,22 +233,26 @@ flowchart LR
     end
     MC -->|POST| API
     LOG -->|POST| API
+    UI -->|GET /dashboard/project| SITE
+    UI -->|GET /dashboard/api/metrics/*| DQ
+    UI -->|GET /logs, log section| API
     API --> M
     API --> L
+    DQ --> M
     RET --> M
     RET --> L
 ```
 
-**Boundaries:** `spyglass.client` never touches SQLAlchemy. `spyglass.server` routes by `project` and opens the correct DB pair. Retention runs in a daemon thread using `schedule` (hourly, plus once at startup).
+**Boundaries:** `spyglass.client` never touches SQLAlchemy. `spyglass.server.routes` (ingest/query API) and `spyglass.server.site` (dashboard UI + JSON API) both route by `project` through `db.store.ProjectStore`, which lazily creates and migrates each project's `metrics.db`/`logs.db` on first access. Retention runs in a daemon thread using `schedule` (hourly, plus once at startup).
 
-**Stat naming:** With default `prefix=True`, `increment("requests")` inside `handle_request` becomes `{project}.handle_request.requests`. Use `prefix=False` to send a full stat name unchanged.
+**Stat naming:** With default `prefix=True`, `increment("requests")` inside `handle_request` becomes `{project}.handle_request.requests`. Use `prefix=False` to send a full stat name unchanged (used e.g. by decorators that would otherwise report their own wrapper function's name as the caller).
 
 ## Client SDK
 
 | Component | Role |
 |-----------|------|
 | `initialize(host, project, ...)` | Returns `(logger, MetricsCollector)`; logger name matches caller's `__name__` |
-| `MetricsCollector(host, project, ...)` | `increment`, `decrement`, `gauge`, `timing`, `set`, `timed()` context manager |
+| `MetricsCollector(host, project, ...)` | `increment`, `decrement`, `gauge`, `timing`, `set`, `timed()` context manager (also usable as a decorator) |
 | `configure_logging(host, project, ...)` | `basicConfig` to stdout + remote `SpyglassHandler` (used by `initialize`) |
 
 `project` must be a non-empty string; there is no auto-discovery from `pyproject.toml`.
@@ -257,143 +272,75 @@ Base URL: `http://{host}:{port}` (default `5013`).
 | `/metrics` | GET | Query metrics (`project` required) |
 | `/logs` | GET | Query logs (`project` required) |
 
-**Register project:**
+GET query params: `name` (prefix), `metric_type`, `from`, `to`, `limit`. Logs support `level`, `from`, `to`, `limit`.
 
 ```bash
 curl -X POST http://localhost:5013/projects/register \
   -H "Content-Type: application/json" \
   -d '{"project": "my-api", "retention_days": 30}'
-```
 
-**Ingest metric (single point):**
-
-```bash
 curl -X POST http://localhost:5013/metrics \
   -H "Content-Type: application/json" \
-  -d '{
-    "project": "my-api",
-    "name": "my-api.handle_request.requests",
-    "metric_type": "counter",
-    "value": 1
-  }'
-```
+  -d '{"project": "my-api", "name": "my-api.handle_request.requests", "metric_type": "counter", "value": 1}'
 
-**Query metrics:**
-
-```bash
 curl "http://localhost:5013/metrics?project=my-api&metric_type=counter&limit=100"
 ```
 
-GET query params: `name` (prefix), `metric_type`, `from`, `to`, `limit`. Logs support `level`, `from`, `to`, `limit`.
+### Dashboard API (`spyglass.server.site`)
 
-## Building dashboards
+Backs the hosted dashboard UI; also usable directly.
 
-Spyglass is headless — it provides no hosted UI. Consumer apps fetch raw data via `SpyglassQueryClient` and use the `spyglass.dashboard` Python library to aggregate it before rendering their own views.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/dashboard/` | GET | Project index |
+| `/dashboard/{project}` | GET | Renders `templates/dashboard/{project}.html`, 404 if no template exists |
+| `/dashboard/api/projects` | GET | List registered project slugs + display names |
+| `/dashboard/api/metrics/names` | GET | Distinct metric names + types for a project |
+| `/dashboard/api/metrics/series` | GET | Bucketed time series for one metric (`name`, `from`, `to`, `interval` seconds, `tag_{key}={value}`) |
+| `/dashboard/api/metrics/summary` | GET | `latest_value`, `sum`, `min`, `avg`, `max`, and `count`/`p50`/`p95` for timings, over a window |
+| `/dashboard/api/metrics/tag-values` | GET | Distinct tag values for a metric + tag key |
+| `/dashboard/api/metrics/histogram` | GET | Equal-width histogram bins for a metric over a window |
+| `/dashboard/api/layout` | GET/PUT | Load/save a per-project widget layout (`data/{slug}/dashboard.json`) — not currently used by any shipped dashboard template, which hardcode their own sections instead |
 
-### Fetching data
+## Dashboards
 
-`SpyglassQueryClient` wraps the HTTP API with typed helpers:
+Adding a dashboard for a new project means dropping a template file — no Python changes:
 
-```python
-from spyglass.client.query import SpyglassQueryClient
-from datetime import datetime, timezone, timedelta
+1. Create `src/spyglass/templates/dashboard/{project}.html`, extending `_base.html`:
+   ```jinja
+   {% extends "dashboard/_base.html" %}
+   {% block title %}{project}{% endblock %}
+   {% block sections %}...{% endblock %}
+   {% block script %}<script>...</script>{% endblock %}
+   ```
+2. In `{% block script %}`, call `initDashboard({ project, loadFn, defaultWindowAmount, defaultWindowUnit, defaultRollupMinutes })` from `static/dashboard/js/dashboard-lib.js`. `loadFn(win, signal)` fires on load, on control changes, and every 30s.
+3. Build sections with the shared helpers, all reading from the Dashboard API above: `buildLineChart`, `buildBarChart`, `buildStackedBarChart` (Chart.js canvases), `fillStats`, `fillDerivedStat` (stat elements by id).
+4. Reuse existing CSS classes from `static/dashboard/css/{shared,components}.css` — `.card`, `.card-full`, `.stat-grid`, `.chart-card`, `.chart-card--inset`, `.ts-top-row`, `.em-stat-row` — rather than adding new ones.
 
-client = SpyglassQueryClient(host="localhost:5013", project="my-api")
+`_base.html` provides the sidebar (auto-populated from every `templates/dashboard/*.html` except `_base`/`index`), time-window controls, and the full log section (histogram, filterable table, traceback rendering, pattern grouping) — none of that is per-project.
 
-since = datetime.now(timezone.utc) - timedelta(hours=6)
-metrics = client.fetch_metrics(since=since)   # list[dict]
-logs    = client.fetch_logs(since=since)       # list[dict]
-```
+Reference dashboards: `energy-monitor.html`, `trainspotter.html`, `incognita.html`. `docs/*-dashboard-handoff.md` record metric-naming changes behind an existing dashboard (e.g. a metric rename or removal) — not build instructions.
 
-### Aggregating with SummaryBuilder
+### Legacy aggregation library
 
-`SummaryBuilder` is the high-level entry point. Configure it once, call `build()` per request:
-
-```python
-from spyglass.dashboard.builder import SummaryBuilder
-from spyglass.dashboard.config import MetricSelector, ChartDefinition, ChartSeries, StateTransitionRule
-
-builder = SummaryBuilder(
-    selectors={
-        "requests": MetricSelector(".requests", metric_type="counter"),
-        "latency":  MetricSelector(".latency",  metric_type="timing"),
-        "queue":    MetricSelector(".queue_depth", metric_type="gauge"),
-        "healthy":  MetricSelector(".healthy",  metric_type="counter"),
-        "degraded": MetricSelector(".degraded", metric_type="counter"),
-    },
-    state_rules=[
-        StateTransitionRule("healthy",  "healthy"),
-        StateTransitionRule("degraded", "degraded"),
-    ],
-    charts=[
-        ChartDefinition("throughput", series=[ChartSeries("reqs", "requests", metric_type="counter")]),
-        ChartDefinition("latency_p50", series=[ChartSeries("p50", "latency", metric_type="timing")]),
-    ],
-    states=["healthy", "degraded", "unknown"],
-)
-
-summary = builder.build(metrics, logs, window_amount=6, window_unit="hours", rollup="15")
-# summary.counters, summary.timings, summary.gauges, summary.charts, summary.state, summary.logs
-```
-
-### Using aggregate functions directly
-
-For lower-level control, use `spyglass.dashboard.aggregate` directly:
-
-```python
-from spyglass.dashboard.aggregate import (
-    TimeWindow, counter_series, timing_p50_series,
-    counter_sum, timing_summary, latest_gauge,
-    build_log_histogram, compute_state_uptime,
-    ratio_series,
-)
-from datetime import datetime, timezone
-
-now = datetime.now(timezone.utc)
-window = TimeWindow.from_hours(6, now, rollup_minutes=15)
-
-total_requests  = counter_sum(metrics, ".requests")
-latency         = timing_summary(metrics, ".latency")   # .count, .p50, .p95, .max
-queue_depth     = latest_gauge(metrics, ".queue_depth")
-series          = counter_series(metrics, ".requests", window)  # list[float] per bucket
-p50_series      = timing_p50_series(metrics, ".latency", window)
-log_hist        = build_log_histogram(prepare_logs(logs), window)
-```
-
-### Wiring into your Flask app
-
-A typical pattern — expose an `/api/observability/summary` endpoint your frontend calls:
-
-```python
-from flask import jsonify
-from spyglass.client.query import SpyglassQueryClient
-from datetime import datetime, timezone, timedelta
-
-client = SpyglassQueryClient(host="localhost:5013", project="my-api")
-
-@app.get("/api/observability/summary")
-def observability_summary():
-    since = datetime.now(timezone.utc) - timedelta(hours=6)
-    metrics = client.fetch_metrics(since=since)
-    logs    = client.fetch_logs(since=since)
-    summary = builder.build(metrics, logs)
-    return jsonify(summary.__dict__)
-```
+`spyglass.client.query.SpyglassQueryClient` and `spyglass.dashboard.*` (`SummaryBuilder`, `aggregate.py` functions) are a lower-level, server-side aggregation path: fetch raw points over HTTP, aggregate in the consumer app's own Python process, render your own view. No current dashboard (`energy-monitor`, `trainspotter`, `incognita`) uses this — all three use the hosted `/dashboard/{project}` system above. Still present and tested (`tests/test_dashboard.py`) for cases where a consumer app wants to embed aggregated data in its own UI instead of using the hosted one.
 
 ## Data model
 
-Both tables use **`timestamp` as the primary key** (UTC, naive in SQLite).
+Both tables use an autoincrement `id` surrogate primary key, with `timestamp` (UTC, naive in SQLite) indexed separately — migration `0001`/`0002` moved both tables off `timestamp`-as-PK to allow duplicate timestamps. Schema is managed by alembic (`alembic/versions/`, two independent branches: `metrics`, `logs`), applied lazily per project database on first access.
 
-**`metric_points`** (`metrics.db`): `timestamp`, `name`, `metric_type` (see `MetricType` in `spyglass.db.models`), `value`, `tags` (JSON text).
+**`metric_points`** (`metrics.db`): `id`, `timestamp`, `name`, `metric_type` (see `MetricType` in `spyglass.db.models`), `value`, `tags` (JSON text).
 
-**`log_entries`** (`logs.db`): `timestamp`, `level`, `logger_name`, `message`, `extra` (JSON text).
+**`log_entries`** (`logs.db`): `id`, `timestamp`, `level`, `logger_name`, `message`, `extra` (JSON text).
 
-Retention deletes rows older than each project's `retention_days` from `data/{slug}/settings.json`, scanning all project directories every hour.
+Retention deletes rows older than each project's `retention_days` (from `data/{slug}/settings.json`), scanning all project directories every hour.
 
 ## Development
 
 ```bash
 uv sync
-uv run pytest tests/
-uv run ruff check src/spyglass/ tests/
+uv run pytest                              # Python tests + coverage (see pyproject.toml addopts)
+uv run black . --check                     # formatting
+uv run ruff check .                        # linting
+node --test tests/*.mjs                    # dashboard-lib.js tests (not currently wired into CI)
 ```

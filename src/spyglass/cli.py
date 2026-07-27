@@ -1,4 +1,4 @@
-"""CLI entry point. Run `spyglass serve` to start the ingest and read server."""
+"""CLI entry point. Run `spyglass` to start the ingest and read server."""
 
 import logging
 from pathlib import Path

@@ -10,6 +10,8 @@
 /* ── Constants ──────────────────────────────────────────────────────── */
 
 const FONT_SANS = '"Inter", system-ui, -apple-system, sans-serif';
+const REFRESH_INTERVAL_MS = 30_000;
+const LOG_FETCH_LIMIT = 5000;
 
 /* ── Color palette ──────────────────────────────────────────────────── */
 
@@ -111,8 +113,18 @@ async function fetchTagValues(project, metricName, key, signal) {
   return r.json();
 }
 
+async function fetchHistogramMulti(project, metricNames, win, signal, bins, tags) {
+  const qs = new URLSearchParams({ project, from: win.from, to: win.to });
+  for (const name of metricNames) qs.append("name", name);
+  if (bins != null) qs.set("bins", bins);
+  _applyTags(qs, tags);
+  const r = await fetch(`/dashboard/api/metrics/histogram-multi?${qs}`, { signal });
+  if (!r.ok) throw new Error(`fetchHistogramMulti ${metricNames.join(",")}: HTTP ${r.status}`);
+  return r.json();
+}
+
 async function _fetchLogs(project, win, signal) {
-  const qs = new URLSearchParams({ project, from: win.from, to: win.to, limit: 5000 });
+  const qs = new URLSearchParams({ project, from: win.from, to: win.to, limit: LOG_FETCH_LIMIT });
   const r = await fetch(`/logs?${qs}`, { signal });
   if (!r.ok) throw new Error(`fetchLogs: HTTP ${r.status}`);
   return r.json();
@@ -146,6 +158,11 @@ function _upsertChart(canvasId, config) {
   _chartInstances[canvasId] = new Chart(canvas, config);
 }
 
+/** Shared legend label style so multi-series charts (line, bar, histogram) render consistent legends. */
+function _legendLabelStyle(sans) {
+  return { color: COLORS.muted, boxWidth: 12, font: { family: sans, size: 11 }, padding: 14 };
+}
+
 function _baseChartOptions(win, yLabel) {
   const sans = FONT_SANS;
   const spanHours = win?.spanHours ?? 24;
@@ -156,7 +173,7 @@ function _baseChartOptions(win, yLabel) {
     interaction: { mode: "index", intersect: false },
     plugins: {
       legend: {
-        labels: { color: COLORS.muted, boxWidth: 12, font: { family: sans, size: 11 }, padding: 14 },
+        labels: _legendLabelStyle(sans),
       },
       tooltip: {
         callbacks: {
@@ -228,9 +245,13 @@ function _shouldZeroFillMissing(metricType, zeroFillOverride) {
  *
  * @param {string} canvasId - ID of the <canvas> element.
  * @param {string} project  - Spyglass project name.
- * @param {Array}  seriesDefs - [{label, metricName, color, fill?, transform?, tags?, zeroFill?}]
+ * @param {Array}  seriesDefs - [{label, metricName, color, fill?, transform?, tags?, zeroFill?, axis?, axisLabel?}]
  *   transform: (value: number) => number  (e.g. ms → s conversion)
  *   zeroFill: force empty buckets to 0 (default: auto for counter/set metrics)
+ *   axis: "y1" to plot this series on a secondary right-hand axis (default: primary "y")
+ *     — use when one series' scale dwarfs the others (e.g. a slow endpoint in seconds
+ *     next to fast ones in milliseconds).
+ *   axisLabel: title for the series' axis; taken from the first def on each axis that sets it
  * @param {object} win      - {from, to, rollupSeconds} from _getTimeWindow()
  * @param {AbortSignal} signal
  */
@@ -258,13 +279,28 @@ async function buildLineChart(canvasId, project, seriesDefs, win, signal) {
       borderWidth: 1.5,
       // Span only when gaps are truly unknown (timings/gauges). Counter zeros are real points.
       spanGaps: !zeroFill,
+      yAxisID: def.axis === "y1" ? "y1" : "y",
     };
   });
+
+  const options = _baseChartOptions(win, seriesDefs.find((d) => d.axis !== "y1")?.axisLabel);
+  if (seriesDefs.some((def) => def.axis === "y1")) {
+    const sans = FONT_SANS;
+    const y1Label = seriesDefs.find((d) => d.axis === "y1")?.axisLabel;
+    options.scales.y1 = {
+      beginAtZero: true,
+      position: "right",
+      ticks: { color: COLORS.muted, font: { family: sans, size: 11 } },
+      grid: { display: false },
+      border: { color: COLORS.grid },
+      title: y1Label ? { display: true, text: y1Label, color: COLORS.muted, font: { family: sans, size: 11 } } : undefined,
+    };
+  }
 
   _upsertChart(canvasId, {
     type: "line",
     data: { labels: sortedTs, datasets },
-    options: _baseChartOptions(win),
+    options,
   });
 }
 
@@ -338,6 +374,79 @@ async function buildStackedBarChart(canvasId, project, seriesDefs, win, signal) 
     type: "bar",
     data: { labels: sortedTs, datasets },
     options,
+  });
+}
+
+/**
+ * Fetch and render an overlaid multi-series value-distribution histogram.
+ *
+ * Unlike buildLineChart/buildBarChart, the x-axis is the metrics' shared value
+ * range (binned), not time — useful when call volume is too sparse for a
+ * meaningful time series but the value distribution itself is informative.
+ * All series share one set of bin edges computed from their combined range.
+ *
+ * @param {string} canvasId
+ * @param {string} project
+ * @param {Array}  seriesDefs - [{label, metricName, color}]
+ * @param {object} win
+ * @param {AbortSignal} signal
+ * @param {object} [opts] - {bins?, unit?, transform?, tags?}
+ *   transform: (value: number) => number  applied to bin edges before display (e.g. ms → s)
+ */
+async function buildHistogramChart(canvasId, project, seriesDefs, win, signal, opts = {}) {
+  const { bins, unit = "", transform = (v) => v, tags } = opts;
+  const metricNames = seriesDefs.map((def) => def.metricName);
+  const data = await fetchHistogramMulti(project, metricNames, win, signal, bins, tags);
+  const edges = data.edges ?? [];
+  const countsByName = new Map((data.series ?? []).map((s) => [s.name, s.counts]));
+  const sans = FONT_SANS;
+
+  const labels = edges.slice(0, -1).map((lo, i) => {
+    const hi = edges[i + 1];
+    return `${transform(lo).toFixed(1)}${unit}–${transform(hi).toFixed(1)}${unit}`;
+  });
+
+  const datasets = seriesDefs.map((def) => ({
+    label: def.label,
+    data: countsByName.get(def.metricName) ?? [],
+    backgroundColor: `${def.color}99`,
+    borderColor: def.color,
+    borderWidth: 1,
+    borderRadius: 2,
+  }));
+
+  _upsertChart(canvasId, {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: {
+          labels: _legendLabelStyle(sans),
+        },
+        tooltip: {
+          callbacks: {
+            title: (items) => items[0]?.label ?? "",
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: COLORS.muted, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, font: { family: sans, size: 10 } },
+          grid: { display: false },
+          border: { color: COLORS.grid },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: COLORS.muted, font: { family: sans, size: 11 }, precision: 0 },
+          grid: { color: COLORS.grid },
+          border: { color: COLORS.grid },
+          title: { display: true, text: "count", color: COLORS.muted, font: { family: sans, size: 11 } },
+        },
+      },
+    },
   });
 }
 
@@ -941,7 +1050,7 @@ function initDashboard({ project, loadFn, defaultWindowAmount = 1, defaultWindow
     if (e.key === "Enter") load();
   });
 
-  const _intervalId = setInterval(load, 30_000);
+  const _intervalId = setInterval(load, REFRESH_INTERVAL_MS);
 
   globalThis.addEventListener("beforeunload", () => {
     clearInterval(_intervalId);

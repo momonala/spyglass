@@ -5,6 +5,7 @@ import pytest
 from spyglass.client.collector import MetricsCollector
 from spyglass.client.collector import _caller_function
 from spyglass.client.collector import _normalize_host
+from spyglass.db.models import MetricType
 
 
 @pytest.mark.parametrize(
@@ -43,8 +44,6 @@ def test_collector_requires_non_empty_project():
 
 def test_collector_does_not_raise_when_server_unreachable():
     """Emit methods must never propagate exceptions to the caller."""
-    from spyglass.client.collector import MetricsCollector
-
     collector = MetricsCollector(host="localhost:19999", project="test")
     collector.increment("counter")
     collector.decrement("counter")
@@ -54,16 +53,12 @@ def test_collector_does_not_raise_when_server_unreachable():
 
 
 def test_timed_context_manager_does_not_raise_when_server_unreachable():
-    from spyglass.client.collector import MetricsCollector
-
     collector = MetricsCollector(host="localhost:19999", project="test")
     with collector.timed("operation"):
         pass  # no exception should escape
 
 
 def test_decrement_sends_negative_value(monkeypatch):
-    from spyglass.client.collector import MetricsCollector
-
     sent = []
 
     collector = MetricsCollector(host="localhost:19999", project="test")
@@ -71,7 +66,6 @@ def test_decrement_sends_negative_value(monkeypatch):
 
     collector.decrement("requests", value=3)
     assert sent, "Expected _send_point to be called"
-    from spyglass.db.models import MetricType
 
     metric_type, name, value, tags = sent[0]
     assert metric_type == MetricType.COUNTER
@@ -79,8 +73,6 @@ def test_decrement_sends_negative_value(monkeypatch):
 
 
 def test_prefix_false_sends_raw_stat(monkeypatch):
-    from spyglass.client.collector import MetricsCollector
-
     sent = []
 
     collector = MetricsCollector(host="localhost:19999", project="myproject")
@@ -92,8 +84,6 @@ def test_prefix_false_sends_raw_stat(monkeypatch):
 
 
 def test_prefix_true_prepends_project_and_caller(monkeypatch):
-    from spyglass.client.collector import MetricsCollector
-
     sent = []
 
     collector = MetricsCollector(host="localhost:19999", project="myproject")
