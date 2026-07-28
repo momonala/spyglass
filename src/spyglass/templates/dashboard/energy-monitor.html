@@ -135,13 +135,13 @@ const M = {
   dbErrors:      `${PROJECT}.db_worker.mqtt.db_save.errors`,
   dbLatency:     `${PROJECT}.__enter__.db.save_reading`,
   disconnect:    `${PROJECT}.on_disconnect.mqtt.disconnect`,
-  deviceOffline: `${PROJECT}.on_message.mqtt.device.offline`,
+  deviceOffline: `${PROJECT}.handle_lwt_status.mqtt.device.offline`,
   deviceErrors:  `${PROJECT}.on_message.mqtt.device.errors`,
   lowReadings:   `${PROJECT}.log_db_health_check.db.health.low_readings`,
   lastHour:      `${PROJECT}.log_db_health_check.db.readings.last_hour`,
   interval:      `${PROJECT}.on_message.mqtt.sensor.interval_ms`,
-  deviceOnline:  `${PROJECT}.on_message.mqtt.device.online`,
-  downtime:      `${PROJECT}.on_message.mqtt.device.downtime_ms`,
+  deviceOnline:  `${PROJECT}.handle_lwt_status.mqtt.device.online`,
+  downtime:      `${PROJECT}.handle_lwt_status.mqtt.device.downtime_ms`,
 };
 
 initDashboard({
