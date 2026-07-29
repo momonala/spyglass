@@ -252,7 +252,7 @@ flowchart LR
 | Component | Role |
 |-----------|------|
 | `initialize(host, project, ...)` | Returns `(logger, MetricsCollector)`; logger name matches caller's `__name__` |
-| `MetricsCollector(host, project, ...)` | `increment`, `decrement`, `gauge`, `timing`, `set`, `timed()` context manager (also usable as a decorator) |
+| `MetricsCollector(host, project, ...)` | `increment`, `decrement`, `gauge`, `timing`, `set`, `timed()` context manager |
 | `configure_logging(host, project, ...)` | `basicConfig` to stdout + remote `SpyglassHandler` (used by `initialize`) |
 
 `project` must be a non-empty string; there is no auto-discovery from `pyproject.toml`.

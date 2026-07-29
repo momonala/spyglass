@@ -19,11 +19,19 @@ _log = logging.getLogger(__name__)
 SPYGLASS_PACKAGE = "spyglass"
 
 
+_INFRA_MODULES = {"contextlib"}
+
+
 def _caller_function() -> str:
-    """Walk the call stack and return the first function name outside of spyglass."""
+    """Walk the call stack and return the first function name outside of spyglass.
+
+    Also skips ``contextlib`` frames (e.g. ``_GeneratorContextManager.__enter__``),
+    which sit between ``timed()``'s generator and the code that opened it whenever
+    ``timed`` is used via a ``with`` block.
+    """
     for frame_info in inspect.stack():
         module = frame_info.frame.f_globals.get("__name__", "")
-        if not module.startswith(SPYGLASS_PACKAGE):
+        if not module.startswith(SPYGLASS_PACKAGE) and module not in _INFRA_MODULES:
             return frame_info.function
     return "<unknown>"
 
