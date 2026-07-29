@@ -4,125 +4,170 @@
 
 {% block sections %}
 
-  <section class="card card-full" aria-labelledby="dbWritesHeading">
-    <div class="card-header">
-      <h2 id="dbWritesHeading">DB Writes</h2>
-    </div>
-    <div class="chart-card chart-card--inset">
-      <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
-    </div>
-  </section>
+  <div class="card-full stat-row">
 
-  <div class="card-full em-stat-row">
-
-    <section class="card" style="flex:3;min-width:0;" aria-labelledby="latencyHeading">
+    <section class="card col-4" aria-labelledby="dbWritesHeading">
       <div class="card-header">
-        <h2 id="latencyHeading">Write Latency</h2>
+        <h2 id="dbWritesHeading">DB Writes</h2>
       </div>
-      <div class="em-chart-stack">
-        <div class="chart-card chart-card--inset">
-          <canvas id="chartLatency" aria-label="DB write latency over time"></canvas>
-        </div>
-        <div class="chart-card chart-card--inset">
-          <h3 class="chart-title">DB Size</h3>
-          <canvas id="chartDbSize" aria-label="DB size over time"></canvas>
-        </div>
+      <div class="chart-card chart-card--inset">
+        <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
       </div>
     </section>
 
-    <div class="em-stat-col" style="flex:2;min-width:0;">
-      <section class="card" aria-labelledby="parityHeading">
-        <div class="card-header">
-          <h2 id="parityHeading">Parity</h2>
-        </div>
-        <div class="stat-grid stat-grid--paired">
-          <div class="stat">
-            <span class="stat-label">MQTT received</span>
-            <span id="stat-mqtt" class="stat-value">—</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">DB saved</span>
-            <span id="stat-saved" class="stat-value">—</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Duplicates</span>
-            <span id="stat-dup" class="stat-value">—</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Save errors</span>
-            <span id="stat-err" class="stat-value">—</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="card" aria-labelledby="intervalHeading">
-        <div class="card-header">
-          <h2 id="intervalHeading">MQTT Interval</h2>
-        </div>
-        <div class="stat-grid stat-grid--two-col">
-          <div class="stat">
-            <span class="stat-label">Min</span>
-            <span id="stat-interval-min" class="stat-value">—</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Max</span>
-            <span id="stat-interval-max" class="stat-value">—</span>
-          </div>
-          <div class="stat stat--wide">
-            <span class="stat-label">Avg</span>
-            <span id="stat-interval-avg" class="stat-value">—</span>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <section class="card" style="flex:3;min-width:0;" aria-labelledby="downtimeHeading">
+    <section class="card col-2" aria-labelledby="latencyHeading">
       <div class="card-header">
-        <h2 id="downtimeHeading">Downtime</h2>
+        <h2 id="latencyHeading">Write Latency</h2>
       </div>
-      <div class="stat-grid">
-        <span class="stat-group-label">Events</span>
-        <div class="stat">
-          <span class="stat-label">Disconnects</span>
-          <span id="stat-disconnects" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Device offline (LWT)</span>
-          <span id="stat-device-offline" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Device errors (INFO3)</span>
-          <span id="stat-device-errors" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Low-reading alerts</span>
-          <span id="stat-low" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Readings last hour</span>
-          <span id="stat-last-hour" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">DB size</span>
-          <span id="stat-db-size" class="stat-value">—</span>
-        </div>
-        <span class="stat-group-label">Outage duration</span>
-        <div class="stat">
-          <span class="stat-label">Recoveries</span>
-          <span id="stat-recoveries" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Total down</span>
-          <span id="stat-downtime-total" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Longest</span>
-          <span id="stat-downtime-max" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Avg</span>
-          <span id="stat-downtime-avg" class="stat-value">—</span>
-        </div>
+      <div class="chart-card chart-card--inset">
+        <canvas id="chartLatency" aria-label="DB write latency over time"></canvas>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="card-full stat-row">
+
+    <section class="card col-3" aria-labelledby="dbSizeHeading">
+      <div class="card-header">
+        <h2 id="dbSizeHeading">DB Size</h2>
+      </div>
+      <div class="chart-card chart-card--inset">
+        <canvas id="chartDbSize" aria-label="DB size over time"></canvas>
+      </div>
+    </section>
+
+    <section class="card col-5" aria-labelledby="statsHeading">
+      <div class="card-header">
+        <h2 id="statsHeading">Stats</h2>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table stats-table">
+          <thead>
+            <tr>
+              <th scope="col">Events</th>
+              <th scope="col">Outage duration</th>
+              <th scope="col">Parity</th>
+              <th scope="col">MQTT Interval</th>
+              <th scope="col">Database</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Disconnects</span>
+                  <span id="stat-disconnects" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Recoveries</span>
+                  <span id="stat-recoveries" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">MQTT received</span>
+                  <span id="stat-mqtt" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Min</span>
+                  <span id="stat-interval-min" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Readings last hour</span>
+                  <span id="stat-last-hour" class="stat-value">—</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Device offline (LWT)</span>
+                  <span id="stat-device-offline" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Total down</span>
+                  <span id="stat-downtime-total" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">DB saved</span>
+                  <span id="stat-saved" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Max</span>
+                  <span id="stat-interval-max" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">DB size</span>
+                  <span id="stat-db-size" class="stat-value">—</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Device errors (INFO3)</span>
+                  <span id="stat-device-errors" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Longest</span>
+                  <span id="stat-downtime-max" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Duplicates</span>
+                  <span id="stat-dup" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Avg</span>
+                  <span id="stat-interval-avg" class="stat-value">—</span>
+                </div>
+              </td>
+              <td></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Low-reading alerts</span>
+                  <span id="stat-low" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Avg</span>
+                  <span id="stat-downtime-avg" class="stat-value">—</span>
+                </div>
+              </td>
+              <td>
+                <div class="stat">
+                  <span class="stat-label">Save errors</span>
+                  <span id="stat-err" class="stat-value">—</span>
+                </div>
+              </td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
 

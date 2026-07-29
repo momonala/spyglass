@@ -4,100 +4,59 @@
 
 {% block sections %}
 
-  <div class="card-full chart-grid">
+  <div class="card-full stat-row">
 
-    <div class="chart-card">
+    <div class="chart-card col-1">
       <h3 class="chart-title">Poll &amp; analytics duration</h3>
       <canvas id="chartDuration" aria-label="Quota poll and analytics query duration over time"></canvas>
     </div>
 
-    <div class="chart-card">
+    <div class="chart-card col-1">
       <h3 class="chart-title">DB writes</h3>
       <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
     </div>
 
-  </div>
+    <div class="stack-col stack-col--fit col-1">
+      <section class="card" aria-labelledby="pollHeading">
+        <div class="card-header">
+          <h2 id="pollHeading">Quota Poll</h2>
+        </div>
+        <div class="stat-grid stat-grid--two-col">
+          <div class="stat">
+            <span class="stat-label">Success rate</span>
+            <span id="stat-poll-success-rate" class="stat-value stat-danger-or-healthy">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Polls succeeded</span>
+            <span id="stat-poll-success" class="stat-value">—</span>
+          </div>
+        </div>
+      </section>
 
-  <div class="card-full chart-grid">
-
-    <section class="card" aria-labelledby="pollHeading">
-      <div class="card-header">
-        <h2 id="pollHeading">Quota Poll</h2>
-      </div>
-      <div class="stat-grid stat-grid--two-col">
-        <div class="stat">
-          <span class="stat-label">Success rate</span>
-          <span id="stat-poll-success-rate" class="stat-value stat-danger-or-healthy">—</span>
+      <section class="card" aria-labelledby="ingestHeading">
+        <div class="card-header">
+          <h2 id="ingestHeading">Ingest &amp; Maintenance</h2>
         </div>
-        <div class="stat">
-          <span class="stat-label">Polls succeeded</span>
-          <span id="stat-poll-success" class="stat-value">—</span>
+        <div class="stat-grid stat-grid--two-col">
+          <div class="stat">
+            <span class="stat-label">Records inserted</span>
+            <span id="stat-records-inserted" class="stat-value">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Snapshots inserted</span>
+            <span id="stat-snapshots-inserted" class="stat-value">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Daily ping success rate</span>
+            <span id="stat-ping-success-rate" class="stat-value stat-danger-or-healthy">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Backfill success rate</span>
+            <span id="stat-backfill-success-rate" class="stat-value stat-danger-or-healthy">—</span>
+          </div>
         </div>
-        <div class="stat">
-          <span class="stat-label">Claude CLI errors</span>
-          <span id="stat-claude-error" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">No quota lines matched</span>
-          <span id="stat-no-quota-lines" class="stat-value">—</span>
-        </div>
-        <div class="stat stat--wide">
-          <span class="stat-label">Unrecognised labels</span>
-          <span id="stat-unrecognised-label" class="stat-value">—</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="card" aria-labelledby="ingestHeading">
-      <div class="card-header">
-        <h2 id="ingestHeading">Ingest &amp; Maintenance</h2>
-      </div>
-      <div class="stat-grid">
-        <span class="stat-group-label">Usage records</span>
-        <div class="stat">
-          <span class="stat-label">Inserted</span>
-          <span id="stat-records-inserted" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Skipped (dup)</span>
-          <span id="stat-records-skipped" class="stat-value">—</span>
-        </div>
-
-        <span class="stat-group-label">Quota snapshots</span>
-        <div class="stat">
-          <span class="stat-label">Inserted</span>
-          <span id="stat-snapshots-inserted" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Skipped (dup)</span>
-          <span id="stat-snapshots-skipped" class="stat-value">—</span>
-        </div>
-
-        <span class="stat-group-label">Daily ping</span>
-        <div class="stat">
-          <span class="stat-label">Succeeded</span>
-          <span id="stat-ping-success" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Failed</span>
-          <span id="stat-ping-failure" class="stat-value">—</span>
-        </div>
-
-        <span class="stat-group-label">Backfill</span>
-        <div class="stat">
-          <span class="stat-label">Succeeded</span>
-          <span id="stat-backfill-success" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Failed</span>
-          <span id="stat-backfill-failure" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Avg duration</span>
-          <span id="stat-backfill-duration" class="stat-value">—</span>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
   </div>
 
@@ -108,29 +67,24 @@
 // Metric naming: {project}.{caller_function}.{stat}
 // `with metrics.timed(...)` resolves the caller frame to the context manager's own
 // __enter__, not the function that opened it — so poll_quota's `claude /usage` call
-// and get_analytics' DB query both report under the same `__enter__.duration` name,
-// and daily_ping's backfill subprocess reports under `__enter__.backfill_duration`.
+// and get_analytics' DB query both report under the same `__enter__.duration` name.
 // Verify names against /dashboard/api/metrics/names?project=claude-usage-notch-server
 // if charts are empty.
 const PROJECT = "claude-usage-notch-server";
 const M = {
   duration: `${PROJECT}.__enter__.duration`,
 
-  pollSuccess:      `${PROJECT}.poll_quota.success`,
-  claudeError:      `${PROJECT}.poll_quota.claude_error`,
-  unrecognisedLabel:`${PROJECT}.poll_quota.unrecognised_label`,
-  noQuotaLines:     `${PROJECT}.poll_quota.no_quota_lines_matched`,
+  pollSuccess:  `${PROJECT}.poll_quota.success`,
+  claudeError:  `${PROJECT}.poll_quota.claude_error`,
+  noQuotaLines: `${PROJECT}.poll_quota.no_quota_lines_matched`,
 
   recordsInserted:   `${PROJECT}.post_records.records_inserted`,
-  recordsSkipped:    `${PROJECT}.post_records.records_skipped`,
   snapshotsInserted: `${PROJECT}.post_quota_snapshots.quota_snapshots_inserted`,
-  snapshotsSkipped:  `${PROJECT}.post_quota_snapshots.quota_snapshots_skipped`,
 
   pingSuccess:     `${PROJECT}.daily_ping.ping_success`,
   pingFailure:     `${PROJECT}.daily_ping.ping_failure`,
   backfillSuccess: `${PROJECT}.daily_ping.backfill_success`,
   backfillFailure: `${PROJECT}.daily_ping.backfill_failure`,
-  backfillDuration:`${PROJECT}.__enter__.backfill_duration`,
 };
 
 initDashboard({
@@ -162,29 +116,27 @@ initDashboard({
       }, win, signal),
 
       fillStats(PROJECT, [
-        { elementId: "stat-poll-success",       metricName: M.pollSuccess,       pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-claude-error",       metricName: M.claudeError,       pick: (s) => s.sum, format: "count",
-          danger: (s) => (s.sum ?? 0) > 0 },
-        { elementId: "stat-no-quota-lines",     metricName: M.noQuotaLines,      pick: (s) => s.sum, format: "count",
-          danger: (s) => (s.sum ?? 0) > 0 },
-        { elementId: "stat-unrecognised-label", metricName: M.unrecognisedLabel, pick: (s) => s.sum, format: "count",
-          danger: (s) => (s.sum ?? 0) > 0 },
+        { elementId: "stat-poll-success", metricName: M.pollSuccess, pick: (s) => s.sum, format: "count" },
       ], win, signal),
 
       fillStats(PROJECT, [
         { elementId: "stat-records-inserted",   metricName: M.recordsInserted,   pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-records-skipped",    metricName: M.recordsSkipped,    pick: (s) => s.sum, format: "count" },
         { elementId: "stat-snapshots-inserted", metricName: M.snapshotsInserted, pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-snapshots-skipped",  metricName: M.snapshotsSkipped,  pick: (s) => s.sum, format: "count" },
-
-        { elementId: "stat-ping-success",     metricName: M.pingSuccess,     pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-ping-failure",     metricName: M.pingFailure,     pick: (s) => s.sum, format: "count",
-          danger: (s) => (s.sum ?? 0) > 0 },
-        { elementId: "stat-backfill-success", metricName: M.backfillSuccess, pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-backfill-failure", metricName: M.backfillFailure, pick: (s) => s.sum, format: "count",
-          danger: (s) => (s.sum ?? 0) > 0 },
-        { elementId: "stat-backfill-duration", metricName: M.backfillDuration, pick: (s) => s.avg, format: "seconds" },
       ], win, signal),
+
+      fillSuccessRateStat(PROJECT, {
+        elementId: "stat-ping-success-rate",
+        successMetric: M.pingSuccess,
+        errorMetric: M.pingFailure,
+        dangerBelowPct: 100,
+      }, win, signal),
+
+      fillSuccessRateStat(PROJECT, {
+        elementId: "stat-backfill-success-rate",
+        successMetric: M.backfillSuccess,
+        errorMetric: M.backfillFailure,
+        dangerBelowPct: 100,
+      }, win, signal),
     ]);
   },
 });

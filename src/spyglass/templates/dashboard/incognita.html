@@ -4,7 +4,7 @@
 
 {% block sections %}
 
-  <div class="card-full ts-top-row">
+  <div class="card-full ts-top-row ts-top-row--two">
 
     <div class="chart-card">
       <h3 class="chart-title">API latency</h3>
@@ -48,14 +48,6 @@
           <span class="stat-label">Health write errors</span>
           <span id="stat-health-errors" class="stat-value">—</span>
         </div>
-      </div>
-    </section>
-
-    <section class="card" aria-labelledby="storageHeading">
-      <div class="card-header">
-        <h2 id="storageHeading">Storage</h2>
-      </div>
-      <div class="stat-grid">
         <div class="stat">
           <span class="stat-label">Raw data files</span>
           <span id="stat-raw-file-count" class="stat-value">—</span>
@@ -65,40 +57,45 @@
           <span id="stat-db-size" class="stat-value">—</span>
         </div>
       </div>
-      <div class="chart-card chart-card--inset" style="margin-top:16px;">
-        <h3 class="chart-title">DB Size</h3>
-        <canvas id="chartDbSize" aria-label="DB size over time"></canvas>
-      </div>
     </section>
 
   </div>
 
-  <section class="card card-full" aria-labelledby="dbWritesHeading">
-    <div class="card-header">
-      <h2 id="dbWritesHeading">DB Writes</h2>
-    </div>
-    <div class="chart-card chart-card--inset">
-      <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
-    </div>
-  </section>
+  <div class="card-full chart-grid chart-grid--with-summary">
 
-  <div class="card-full chart-grid">
-
-    <section class="card" aria-labelledby="fnCpuHeading">
+    <section class="card" aria-labelledby="dbWritesHeading">
       <div class="card-header">
-        <h2 id="fnCpuHeading">Function CPU time</h2>
+        <h2 id="dbWritesHeading">DB Writes</h2>
       </div>
       <div class="chart-card chart-card--inset">
-        <canvas id="histFnDuration" aria-label="Function CPU time distribution"></canvas>
+        <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
       </div>
     </section>
 
-    <section class="card" aria-labelledby="fnRamHeading">
+    <section class="card" aria-labelledby="dbSizeHeading">
       <div class="card-header">
-        <h2 id="fnRamHeading">Function RAM usage</h2>
+        <h2 id="dbSizeHeading">DB Size</h2>
       </div>
       <div class="chart-card chart-card--inset">
-        <canvas id="histFnMem" aria-label="Function RAM usage distribution"></canvas>
+        <canvas id="chartDbSize" aria-label="DB size over time"></canvas>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="fnStatsHeading">
+      <div class="card-header">
+        <h2 id="fnStatsHeading">Function stats</h2>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table data-table--compact">
+          <thead>
+            <tr>
+              <th scope="col">Function</th>
+              <th scope="col">Max CPU (s)</th>
+              <th scope="col">Max RAM (MB)</th>
+            </tr>
+          </thead>
+          <tbody id="fnStatsTableBody"></tbody>
+        </table>
       </div>
     </section>
 
@@ -168,42 +165,23 @@ initDashboard({
         { label: "DB size (MB)", metricName: M.dbSizeMb, color: COLORS.accent, fill: true },
       ], win, signal),
 
-      buildHistogramChart("histFnDuration", PROJECT, [
-        { label: "gps_df_to_deck_map",             metricName: M.fnDurationGpsDeck,    color: COLORS.accent },
-        { label: "_get_month_trips_cached_impl",   metricName: M.fnDurationMonthTrips, color: COLORS.purple },
-        { label: "get_trip_points_for_date_range", metricName: M.fnDurationTripPoints, color: COLORS.warn },
-        { label: "get_trips_for_date_range",       metricName: M.fnDurationTrips,      color: COLORS.muted },
-      ], win, signal, { bins: 10, unit: "s", transform: (ms) => ms / 1000 }),
+      buildFunctionStatsTable("fnStatsTableBody", PROJECT, [
+        { label: "gps_df_to_deck_map",             durationMetric: M.fnDurationGpsDeck,    memMetric: M.fnMemGpsDeck },
+        { label: "_get_month_trips_cached_impl",   durationMetric: M.fnDurationMonthTrips, memMetric: M.fnMemMonthTrips },
+        { label: "get_trip_points_for_date_range", durationMetric: M.fnDurationTripPoints, memMetric: M.fnMemTripPoints },
+        { label: "get_trips_for_date_range",       durationMetric: M.fnDurationTrips,      memMetric: M.fnMemTrips },
+      ], win, signal),
 
-      buildHistogramChart("histFnMem", PROJECT, [
-        { label: "gps_df_to_deck_map",             metricName: M.fnMemGpsDeck,    color: COLORS.accent },
-        { label: "_get_month_trips_cached_impl",   metricName: M.fnMemMonthTrips, color: COLORS.purple },
-        { label: "get_trip_points_for_date_range", metricName: M.fnMemTripPoints, color: COLORS.warn },
-        { label: "get_trips_for_date_range",       metricName: M.fnMemTrips,      color: COLORS.muted },
-      ], win, signal, { bins: 10, unit: "MB" }),
-
-      fillDerivedStat(PROJECT, {
+      fillSuccessRateStat(PROJECT, {
         elementId: "stat-gps-success-rate",
-        sources: [{ metricName: M.gpsDbSuccess }, { metricName: M.gpsDbError }],
-        compute: ([success, error]) => {
-          const ok = success?.sum ?? 0;
-          const total = ok + (error?.sum ?? 0);
-          return total > 0 ? (ok / total) * 100 : null;
-        },
-        format: "percent",
-        danger: (_summaries, value) => value != null && value < 95,
+        successMetric: M.gpsDbSuccess,
+        errorMetric: M.gpsDbError,
       }, win, signal),
 
-      fillDerivedStat(PROJECT, {
+      fillSuccessRateStat(PROJECT, {
         elementId: "stat-health-success-rate",
-        sources: [{ metricName: M.healthDbSuccess }, { metricName: M.healthDbError }],
-        compute: ([success, error]) => {
-          const ok = success?.sum ?? 0;
-          const total = ok + (error?.sum ?? 0);
-          return total > 0 ? (ok / total) * 100 : null;
-        },
-        format: "percent",
-        danger: (_summaries, value) => value != null && value < 95,
+        successMetric: M.healthDbSuccess,
+        errorMetric: M.healthDbError,
       }, win, signal),
 
       fillStats(PROJECT, [

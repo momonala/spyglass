@@ -43,6 +43,21 @@ const fmt = {
     const parts = [["d", days], ["h", hours], ["m", mins], ["s", secs]].filter(([, v]) => v > 0);
     return parts.slice(0, 2).map(([u, v]) => `${v}${u}`).join(" ");
   },
+  // Like `duration`, but keeps one decimal place of precision when seconds is
+  // one of the two largest units shown, instead of rounding to whole seconds
+  // (e.g. 604200 -> "10m 4.2s", 45300 -> "45.3s", 3723400 -> "1h 2m").
+  durationPrecise: (ms) => {
+    if (ms == null) return "—";
+    const totalSeconds = ms / 1000;
+    if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`;
+    const totalWhole = Math.floor(totalSeconds);
+    const days = Math.floor(totalWhole / 86400);
+    const hours = Math.floor((totalWhole % 86400) / 3600);
+    const mins = Math.floor((totalWhole % 3600) / 60);
+    const secs = totalSeconds - (days * 86400 + hours * 3600 + mins * 60);
+    const parts = [["d", days], ["h", hours], ["m", mins], ["s", secs]].filter(([, v]) => v > 0);
+    return parts.slice(0, 2).map(([unit, v]) => unit === "s" ? `${v.toFixed(1)}${unit}` : `${v}${unit}`).join(" ");
+  },
   percent:   (n) => n == null ? "—" : `${n.toFixed(1)}%`,
   timestamp: (iso) => {
     if (!iso) return "—";
@@ -110,16 +125,6 @@ async function fetchTagValues(project, metricName, key, signal) {
   const qs = new URLSearchParams({ project, name: metricName, key });
   const r = await fetch(`/dashboard/api/metrics/tag-values?${qs}`, { signal });
   if (!r.ok) throw new Error(`fetchTagValues ${metricName}.${key}: HTTP ${r.status}`);
-  return r.json();
-}
-
-async function fetchHistogramMulti(project, metricNames, win, signal, bins, tags) {
-  const qs = new URLSearchParams({ project, from: win.from, to: win.to });
-  for (const name of metricNames) qs.append("name", name);
-  if (bins != null) qs.set("bins", bins);
-  _applyTags(qs, tags);
-  const r = await fetch(`/dashboard/api/metrics/histogram-multi?${qs}`, { signal });
-  if (!r.ok) throw new Error(`fetchHistogramMulti ${metricNames.join(",")}: HTTP ${r.status}`);
   return r.json();
 }
 
@@ -378,79 +383,6 @@ async function buildStackedBarChart(canvasId, project, seriesDefs, win, signal) 
 }
 
 /**
- * Fetch and render an overlaid multi-series value-distribution histogram.
- *
- * Unlike buildLineChart/buildBarChart, the x-axis is the metrics' shared value
- * range (binned), not time — useful when call volume is too sparse for a
- * meaningful time series but the value distribution itself is informative.
- * All series share one set of bin edges computed from their combined range.
- *
- * @param {string} canvasId
- * @param {string} project
- * @param {Array}  seriesDefs - [{label, metricName, color}]
- * @param {object} win
- * @param {AbortSignal} signal
- * @param {object} [opts] - {bins?, unit?, transform?, tags?}
- *   transform: (value: number) => number  applied to bin edges before display (e.g. ms → s)
- */
-async function buildHistogramChart(canvasId, project, seriesDefs, win, signal, opts = {}) {
-  const { bins, unit = "", transform = (v) => v, tags } = opts;
-  const metricNames = seriesDefs.map((def) => def.metricName);
-  const data = await fetchHistogramMulti(project, metricNames, win, signal, bins, tags);
-  const edges = data.edges ?? [];
-  const countsByName = new Map((data.series ?? []).map((s) => [s.name, s.counts]));
-  const sans = FONT_SANS;
-
-  const labels = edges.slice(0, -1).map((lo, i) => {
-    const hi = edges[i + 1];
-    return `${transform(lo).toFixed(1)}${unit}–${transform(hi).toFixed(1)}${unit}`;
-  });
-
-  const datasets = seriesDefs.map((def) => ({
-    label: def.label,
-    data: countsByName.get(def.metricName) ?? [],
-    backgroundColor: `${def.color}99`,
-    borderColor: def.color,
-    borderWidth: 1,
-    borderRadius: 2,
-  }));
-
-  _upsertChart(canvasId, {
-    type: "bar",
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: {
-        legend: {
-          labels: _legendLabelStyle(sans),
-        },
-        tooltip: {
-          callbacks: {
-            title: (items) => items[0]?.label ?? "",
-          },
-        },
-      },
-      scales: {
-        x: {
-          ticks: { color: COLORS.muted, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, font: { family: sans, size: 10 } },
-          grid: { display: false },
-          border: { color: COLORS.grid },
-        },
-        y: {
-          beginAtZero: true,
-          ticks: { color: COLORS.muted, font: { family: sans, size: 11 }, precision: 0 },
-          grid: { color: COLORS.grid },
-          border: { color: COLORS.grid },
-          title: { display: true, text: "count", color: COLORS.muted, font: { family: sans, size: 11 } },
-        },
-      },
-    },
-  });
-}
-
-/**
  * Fetch summaries and fill stat elements.
  *
  * @param {string} project
@@ -516,6 +448,71 @@ async function fillDerivedStat(project, def, win, signal) {
     el.classList.toggle("stat-danger", isDanger);
     el.classList.toggle("stat-healthy", !isDanger && el.classList.contains("stat-danger-or-healthy"));
   }
+}
+
+/**
+ * Fill a stat with a success-rate percentage derived from a success/error counter pair.
+ *
+ * @param {string} project
+ * @param {object} def - {elementId, successMetric, errorMetric, dangerBelowPct?}
+ *   dangerBelowPct: mark the stat danger when the rate falls below this (default 95)
+ * @param {object} win
+ * @param {AbortSignal} signal
+ */
+async function fillSuccessRateStat(project, def, win, signal) {
+  const dangerBelowPct = def.dangerBelowPct ?? 95;
+  return fillDerivedStat(project, {
+    elementId: def.elementId,
+    sources: [{ metricName: def.successMetric }, { metricName: def.errorMetric }],
+    compute: ([success, error]) => {
+      const ok = success?.sum ?? 0;
+      const total = ok + (error?.sum ?? 0);
+      return total > 0 ? (ok / total) * 100 : null;
+    },
+    format: "percent",
+    danger: (_summaries, value) => value != null && value < dangerBelowPct,
+  }, win, signal);
+}
+
+/**
+ * Fetch per-function summaries and render a max-CPU / max-RAM table.
+ *
+ * @param {string} tbodyId - ID of the <tbody> element.
+ * @param {string} project
+ * @param {Array}  rows - [{label, durationMetric, memMetric}]
+ *   durationMetric values are read in ms; the unit belongs on the column header
+ *   (e.g. "Max CPU (s)"), so cells always show a bare number of seconds.
+ *   memMetric values are read in MB; the unit likewise belongs on the header,
+ *   so cells show a bare number.
+ * @param {object} win
+ * @param {AbortSignal} signal
+ */
+async function buildFunctionStatsTable(tbodyId, project, rows, win, signal) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+
+  const metricNames = rows.flatMap((r) => [r.durationMetric, r.memMetric]);
+  const results = await Promise.allSettled(
+    metricNames.map((name) => fetchSummary(project, name, win, signal))
+  );
+
+  tbody.replaceChildren();
+  rows.forEach((row, i) => {
+    const durSummary = results[i * 2].status === "fulfilled" ? results[i * 2].value : null;
+    const memSummary = results[i * 2 + 1].status === "fulfilled" ? results[i * 2 + 1].value : null;
+    const maxDurationMs = durSummary?.max ?? null;
+    const maxMemMb = memSummary?.max ?? null;
+
+    const tr = document.createElement("tr");
+    const nameCell = document.createElement("td");
+    nameCell.textContent = row.label;
+    const cpuCell = document.createElement("td");
+    cpuCell.textContent = maxDurationMs == null ? "—" : (maxDurationMs / 1000).toFixed(1);
+    const ramCell = document.createElement("td");
+    ramCell.textContent = maxMemMb != null ? maxMemMb.toFixed(1) : "—";
+    tr.append(nameCell, cpuCell, ramCell);
+    tbody.appendChild(tr);
+  });
 }
 
 /* ── Log section ────────────────────────────────────────────────────── */

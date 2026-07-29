@@ -249,6 +249,31 @@ h1 {
   gap: 12px;
 }
 
+/* Stacks full-width cards vertically instead of side by side. */
+.card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Two wide charts plus a narrower summary panel (e.g. a compact stats table). */
+.chart-grid--with-summary {
+  grid-template-columns: 2fr 2fr 1fr;
+}
+
+/* Grid rows stretch every .card to the row's tallest sibling (the summary
+   panel usually wins). Without this, a chart-card--inset's fixed height
+   left dead space below the chart instead of filling that stretched card. */
+.chart-grid--with-summary > .card {
+  display: flex;
+  flex-direction: column;
+}
+.chart-grid--with-summary > .card .chart-card--inset {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
 .chart-card {
   background: var(--glass-bg-deep);
   backdrop-filter: blur(12px);
@@ -311,6 +336,12 @@ h1 {
 }
 
 .data-table tbody tr:last-child td { border-bottom: none; }
+
+/* Smaller type for tables squeezed into a narrow column (e.g. the 20% summary
+   slot in .chart-grid--with-summary), so long function names fit without scrolling. */
+.data-table--compact { font-size: 11px; }
+.data-table--compact th { font-size: 9px; padding: 4px 6px; }
+.data-table--compact td { padding: 4px 6px; }
 
 /* ── Level badge ───────────────────────────────────────── */
 
@@ -623,60 +654,88 @@ h1 {
   overflow: hidden;
 }
 
-/* ── Energy monitor layout ─────────────────────────────── */
+/* ── Multi-column stat/chart row layout ───────────────────
+   Shared by any dashboard page that lays out a row of unevenly-weighted
+   columns, where one or more columns stack multiple cards vertically. */
 
-.em-stat-row {
+.stat-row {
   display: flex;
   gap: 16px;
   align-items: stretch;
 }
 
-/* Stacks two compact stat cards vertically within one em-stat-row column. */
-.em-stat-col {
+.stat-row .col-1 { flex: 1; min-width: 0; }
+.stat-row .col-2 { flex: 2; min-width: 0; }
+.stat-row .col-3 { flex: 3; min-width: 0; }
+.stat-row .col-4 { flex: 4; min-width: 0; }
+.stat-row .col-5 { flex: 5; min-width: 0; }
+
+/* A standalone .chart-card placed directly in a .stat-row (not stacked) grows
+   past its default fixed height to match the row's tallest column instead of
+   staying capped at --chart-height. */
+.stat-row > .chart-card {
+  height: auto;
+  min-height: var(--chart-height);
+}
+
+/* Stacks cards vertically within one .stat-row column; the cards split the
+   column's height evenly so the stack's combined height always matches its
+   single-card (or other stack's) neighbors in the row. Supports both a
+   .card-wrapped chart (.chart-card--inset) and a standalone .chart-card. */
+.stack-col {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-/* Stacks two chart-card--inset charts vertically within one card. */
-.em-chart-stack {
+.stack-col > .card {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 28px;
 }
 
-/* Two fixed columns filled top-to-bottom, so paired stats stack per column
-   (col 1 = first two stats, col 2 = next two) instead of flowing row-major. */
-.stat-grid--paired {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(2, auto);
-  grid-auto-flow: column;
+.stack-col > .card .chart-card--inset {
+  flex: 1;
+  height: auto;
+  min-height: 0;
 }
 
-/* Fixed two columns; a .stat--wide child spans the full row (e.g. Min|Max, then Avg). */
+.stack-col > .chart-card {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+/* Lets each stacked card size to its own content instead of splitting the
+   stack's height evenly — use when the stacked cards hold unequal amounts of
+   content (e.g. a 1-row stat card next to a 2-row stat card). */
+.stack-col--fit > .card {
+  flex: none;
+}
+
+/* Fixed two columns; a .stat--wide child spans the full row (e.g. Min|Max, then Avg).
+   Self-contained (display/grid-column set explicitly) so it also works nested
+   inside a parent .stat-grid. */
 .stat-grid--two-col {
+  grid-column: 1 / -1;
+  display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 .stat-grid--two-col .stat--wide {
   grid-column: 1 / -1;
 }
 
-/* Small caption dividing stat groups inside a single card. */
-.stat-group-label {
-  grid-column: 1 / -1;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: var(--label-tertiary);
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 0.5px solid var(--glass-border);
+/* Turns a .data-table into an aligned grid of stat groups: one column per
+   group, each cell holding a .stat (label + value). Centers everything so
+   values line up cleanly instead of the free-flowing .stat-grid layout. */
+.stats-table th,
+.stats-table td {
+  text-align: center;
 }
-.stat-group-label:first-child {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
+.stats-table .stat {
+  align-items: center;
 }
 
 /* ── Sidebar ───────────────────────────────────────────── */
