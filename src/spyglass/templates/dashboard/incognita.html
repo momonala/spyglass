@@ -4,7 +4,7 @@
 
 {% block sections %}
 
-  <div class="card-full ts-top-row ts-top-row--two">
+  <div class="card-full ts-top-row">
 
     <div class="chart-card">
       <h3 class="chart-title">API latency</h3>
@@ -48,6 +48,23 @@
         <div class="stat">
           <span class="stat-label">Health write errors</span>
           <span id="stat-health-errors" class="stat-value">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="storageHeading">
+      <div class="card-header">
+        <h2 id="storageHeading">Storage</h2>
+        <p class="card-subtitle">Raw GeoJSON file count and total DB size, reported hourly</p>
+      </div>
+      <div class="stat-grid">
+        <div class="stat">
+          <span class="stat-label">Raw data files</span>
+          <span id="stat-raw-file-count" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">DB size</span>
+          <span id="stat-db-size" class="stat-value">—</span>
         </div>
       </div>
     </section>
@@ -122,6 +139,9 @@ const M = {
   fnMemMonthTrips: `${PROJECT}._get_month_trips_cached_impl.mem_delta_mb`,
   fnMemTripPoints: `${PROJECT}.get_trip_points_for_date_range.mem_delta_mb`,
   fnMemTrips:      `${PROJECT}.get_trips_for_date_range.mem_delta_mb`,
+
+  rawFileCount: `${PROJECT}.report_storage_metrics.raw_data_file_count`,
+  dbSizeMb:     `${PROJECT}.report_storage_metrics.db_size_mb`,
 };
 
 initDashboard({
@@ -196,6 +216,12 @@ initDashboard({
         { elementId: "stat-batches-received",  metricName: M.batchesReceived,  pick: (s) => s.sum, format: "count" },
         { elementId: "stat-validation-error",  metricName: M.validationError,  pick: (s) => s.sum, format: "count",
           danger: (s) => (s.sum ?? 0) > 0 },
+      ], win, signal),
+
+      fillStats(PROJECT, [
+        { elementId: "stat-raw-file-count", metricName: M.rawFileCount, pick: (s) => s.latest_value, format: "count" },
+        { elementId: "stat-db-size",        metricName: M.dbSizeMb,    pick: (s) => s.latest_value,
+          format: (v) => v == null ? "—" : `${v.toFixed(0)} MB` },
       ], win, signal),
     ]);
   },
