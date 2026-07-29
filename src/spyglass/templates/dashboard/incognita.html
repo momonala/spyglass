@@ -14,7 +14,6 @@
     <section class="card" aria-labelledby="ingestHeading">
       <div class="card-header">
         <h2 id="ingestHeading">Ingest &amp; DB writes</h2>
-        <p class="card-subtitle">Files/batches received and SQLite write reliability in window</p>
       </div>
       <div class="stat-grid stat-grid--two-col">
         <div class="stat">
@@ -55,7 +54,6 @@
     <section class="card" aria-labelledby="storageHeading">
       <div class="card-header">
         <h2 id="storageHeading">Storage</h2>
-        <p class="card-subtitle">Raw GeoJSON file count and total DB size, reported hourly</p>
       </div>
       <div class="stat-grid">
         <div class="stat">
@@ -67,6 +65,10 @@
           <span id="stat-db-size" class="stat-value">—</span>
         </div>
       </div>
+      <div class="chart-card chart-card--inset" style="margin-top:16px;">
+        <h3 class="chart-title">DB Size</h3>
+        <canvas id="chartDbSize" aria-label="DB size over time"></canvas>
+      </div>
     </section>
 
   </div>
@@ -74,7 +76,6 @@
   <section class="card card-full" aria-labelledby="dbWritesHeading">
     <div class="card-header">
       <h2 id="dbWritesHeading">DB Writes</h2>
-      <p class="card-subtitle">GPS files and HealthKit batches successfully written to SQLite over time</p>
     </div>
     <div class="chart-card chart-card--inset">
       <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
@@ -86,7 +87,6 @@
     <section class="card" aria-labelledby="fnCpuHeading">
       <div class="card-header">
         <h2 id="fnCpuHeading">Function CPU time</h2>
-        <p class="card-subtitle">Distribution of wall time per call across GPS-rendering functions (s)</p>
       </div>
       <div class="chart-card chart-card--inset">
         <canvas id="histFnDuration" aria-label="Function CPU time distribution"></canvas>
@@ -96,7 +96,6 @@
     <section class="card" aria-labelledby="fnRamHeading">
       <div class="card-header">
         <h2 id="fnRamHeading">Function RAM usage</h2>
-        <p class="card-subtitle">Distribution of RSS memory change per call across GPS-rendering functions (MB)</p>
       </div>
       <div class="chart-card chart-card--inset">
         <canvas id="histFnMem" aria-label="Function RAM usage distribution"></canvas>
@@ -163,6 +162,10 @@ initDashboard({
       buildLineChart("chartDbWrites", PROJECT, [
         { label: "GPS writes",    metricName: M.gpsDbSuccess,    color: COLORS.success, fill: true },
         { label: "Health writes", metricName: M.healthDbSuccess, color: COLORS.accent,  fill: true },
+      ], win, signal),
+
+      buildLineChart("chartDbSize", PROJECT, [
+        { label: "DB size (MB)", metricName: M.dbSizeMb, color: COLORS.accent, fill: true },
       ], win, signal),
 
       buildHistogramChart("histFnDuration", PROJECT, [

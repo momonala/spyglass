@@ -642,7 +642,7 @@ h1 {
 .em-chart-stack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 28px;
 }
 
 /* Two fixed columns filled top-to-bottom, so paired stats stack per column

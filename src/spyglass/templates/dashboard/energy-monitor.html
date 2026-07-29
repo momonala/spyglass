@@ -7,7 +7,6 @@
   <section class="card card-full" aria-labelledby="dbWritesHeading">
     <div class="card-header">
       <h2 id="dbWritesHeading">DB Writes</h2>
-      <p class="card-subtitle">MQTT messages received vs database writes over time</p>
     </div>
     <div class="chart-card chart-card--inset">
       <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
@@ -19,13 +18,13 @@
     <section class="card" style="flex:3;min-width:0;" aria-labelledby="latencyHeading">
       <div class="card-header">
         <h2 id="latencyHeading">Write Latency</h2>
-        <p class="card-subtitle">DB save timing (ms)</p>
       </div>
       <div class="em-chart-stack">
         <div class="chart-card chart-card--inset">
           <canvas id="chartLatency" aria-label="DB write latency over time"></canvas>
         </div>
         <div class="chart-card chart-card--inset">
+          <h3 class="chart-title">DB Size</h3>
           <canvas id="chartDbSize" aria-label="DB size over time"></canvas>
         </div>
       </div>
@@ -35,7 +34,6 @@
       <section class="card" aria-labelledby="parityHeading">
         <div class="card-header">
           <h2 id="parityHeading">Parity</h2>
-          <p class="card-subtitle">Message and write counts in window</p>
         </div>
         <div class="stat-grid stat-grid--paired">
           <div class="stat">
@@ -60,7 +58,6 @@
       <section class="card" aria-labelledby="intervalHeading">
         <div class="card-header">
           <h2 id="intervalHeading">MQTT Interval</h2>
-          <p class="card-subtitle">Time between sensor messages</p>
         </div>
         <div class="stat-grid stat-grid--two-col">
           <div class="stat">
@@ -82,7 +79,6 @@
     <section class="card" style="flex:3;min-width:0;" aria-labelledby="downtimeHeading">
       <div class="card-header">
         <h2 id="downtimeHeading">Downtime</h2>
-        <p class="card-subtitle">Disconnect, error events, and outage duration in window</p>
       </div>
       <div class="stat-grid">
         <span class="stat-group-label">Events</span>
