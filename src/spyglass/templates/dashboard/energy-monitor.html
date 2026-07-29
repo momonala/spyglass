@@ -101,6 +101,10 @@
           <span class="stat-label">Readings last hour</span>
           <span id="stat-last-hour" class="stat-value">—</span>
         </div>
+        <div class="stat">
+          <span class="stat-label">DB size</span>
+          <span id="stat-db-size" class="stat-value">—</span>
+        </div>
         <span class="stat-group-label">Outage duration</span>
         <div class="stat">
           <span class="stat-label">Recoveries</span>
@@ -139,6 +143,7 @@ const M = {
   deviceErrors:  `${PROJECT}.on_message.mqtt.device.errors`,
   lowReadings:   `${PROJECT}.log_db_health_check.db.health.low_readings`,
   lastHour:      `${PROJECT}.log_db_health_check.db.readings.last_hour`,
+  dbSizeMb:      `${PROJECT}.log_db_health_check.db.size_mb`,
   interval:      `${PROJECT}.on_message.mqtt.sensor.interval_ms`,
   deviceOnline:  `${PROJECT}.handle_lwt_status.mqtt.device.online`,
   downtime:      `${PROJECT}.handle_lwt_status.mqtt.device.downtime_ms`,
@@ -178,6 +183,8 @@ initDashboard({
         { elementId: "stat-low",            metricName: M.lowReadings,   pick: (s) => s.sum, format: "count",
           danger: (s) => (s.sum ?? 0) > 0 },
         { elementId: "stat-last-hour",      metricName: M.lastHour,      pick: (s) => s.latest_value, format: "count" },
+        { elementId: "stat-db-size",        metricName: M.dbSizeMb,      pick: (s) => s.latest_value,
+          format: (v) => v == null ? "—" : `${v.toFixed(1)} MB` },
         { elementId: "stat-recoveries",     metricName: M.deviceOnline,  pick: (s) => s.sum, format: "count" },
         { elementId: "stat-downtime-total", metricName: M.downtime,      pick: (s) => s.sum, format: "duration",
           danger: (s) => (s.sum ?? 0) > 0 },
