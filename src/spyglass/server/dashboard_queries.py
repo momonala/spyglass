@@ -57,9 +57,7 @@ def _tag_filter_clauses(tags: dict[str, str] | None) -> list[Any]:
     return [func.json_extract(MetricPoint.tags, f"$.{key}") == value for key, value in tags.items()]
 
 
-def _select_values_stmt(
-    name: str, from_ts: datetime, to_ts: datetime, tag_clauses: list[Any]
-) -> Any:
+def _select_values_stmt(name: str, from_ts: datetime, to_ts: datetime, tag_clauses: list[Any]) -> Any:
     """Build a SELECT for a metric's raw values within a time window."""
     return (
         select(MetricPoint.value)
@@ -203,7 +201,8 @@ def query_metric_summary(
         timing_values: list[float] | None = None
         if metric_type == MetricType.TIMING.value:
             timing_values = [
-                float(v) for v in session.execute(_select_values_stmt(name, from_ts, to_ts, tag_clauses)).scalars()
+                float(v)
+                for v in session.execute(_select_values_stmt(name, from_ts, to_ts, tag_clauses)).scalars()
             ]
 
     total = agg.total if agg else None
@@ -268,7 +267,10 @@ def query_metric_histogram_multi(
 
     with store.metrics_session(slug) as session:
         values_by_name = {
-            name: [float(v) for v in session.execute(_select_values_stmt(name, from_ts, to_ts, tag_clauses)).scalars()]
+            name: [
+                float(v)
+                for v in session.execute(_select_values_stmt(name, from_ts, to_ts, tag_clauses)).scalars()
+            ]
             for name in names
         }
 

@@ -21,8 +21,13 @@
         <h2 id="latencyHeading">Write Latency</h2>
         <p class="card-subtitle">DB save timing (ms)</p>
       </div>
-      <div class="chart-card chart-card--inset">
-        <canvas id="chartLatency" aria-label="DB write latency over time"></canvas>
+      <div class="em-chart-stack">
+        <div class="chart-card chart-card--inset">
+          <canvas id="chartLatency" aria-label="DB write latency over time"></canvas>
+        </div>
+        <div class="chart-card chart-card--inset">
+          <canvas id="chartDbSize" aria-label="DB size over time"></canvas>
+        </div>
       </div>
     </section>
 
@@ -163,6 +168,10 @@ initDashboard({
 
       buildLineChart("chartLatency", PROJECT, [
         { label: "DB write (ms)", metricName: M.dbLatency, color: COLORS.warn },
+      ], win, signal),
+
+      buildLineChart("chartDbSize", PROJECT, [
+        { label: "DB size (MB)", metricName: M.dbSizeMb, color: COLORS.accent, fill: true },
       ], win, signal),
 
       fillStats(PROJECT, [
