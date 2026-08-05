@@ -8,6 +8,7 @@ import datetime
 from enum import StrEnum
 
 from sqlalchemy import Float
+from sqlalchemy import ForeignKey
 from sqlalchemy import Index
 from sqlalchemy import Integer
 from sqlalchemy import String
@@ -81,15 +82,29 @@ class MetricTypeCode(TypeDecorator):
         return self._FROM_CODE[value]
 
 
+class MetricName(MetricsBase):
+    """A distinct metric name, normalized out of metric_points.
+
+    Metric names are long, low-cardinality strings (a few dozen at most)
+    repeated across hundreds of thousands of rows; storing them once here
+    and referencing by id shrinks both the table and its indexes.
+    """
+
+    __tablename__ = "metric_names"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+
 class MetricPoint(MetricsBase):
     """One emitted metric data point."""
 
     __tablename__ = "metric_points"
-    __table_args__ = (Index("ix_metric_name_ts", "name", "timestamp"),)
+    __table_args__ = (Index("ix_metric_name_id_ts", "name_id", "timestamp"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(EpochDateTime, nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    name_id: Mapped[int] = mapped_column(Integer, ForeignKey("metric_names.id"), nullable=False)
     metric_type: Mapped[str] = mapped_column(MetricTypeCode, nullable=False)
     value: Mapped[float] = mapped_column(Float, nullable=False)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -106,4 +121,3 @@ class LogEntry(LogsBase):
     level: Mapped[str] = mapped_column(String, nullable=False)
     logger_name: Mapped[str] = mapped_column(String, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    extra: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -27,7 +27,9 @@ uv sync
 uv run spyglass
 ```
 
-Open `http://localhost:5013/dashboard/` — lists any registered project that has a template under `src/spyglass/templates/dashboard/`.
+Open `http://localhost:5013/dashboard/` — one card per registered project showing row counts, 24h error count, a 48-hour write-rate sparkline, on-disk size and retention. The sidebar lists any project that has a template under `src/spyglass/templates/dashboard/`.
+
+The index deliberately stays quiet when everything is fine: there is no per-project "healthy" indicator, because one that is green on every card carries no information. State surfaces through the fields that already exist — the error count turns red when non-zero, and the last-activity age turns amber once a project has written nothing for 24h.
 
 In another terminal, instrument an app (project name is **required**):
 
@@ -190,13 +192,15 @@ spyglass/
 │   │   │   ├── models.py        # MetricPoint, LogEntry (timestamp PK)
 │   │   │   └── store.py         # per-project SQLite routing + lazy alembic migration
 │   │   ├── templates/dashboard/
-│   │   │   ├── _base.html       # shared shell: sidebar, header controls, log section
-│   │   │   ├── index.html       # /dashboard/ project list
+│   │   │   ├── _base.html       # shared shell: header controls, log section
+│   │   │   ├── _sidebar.html    # project rail, included by _base and index
+│   │   │   ├── index.html       # /dashboard/ project overview cards
 │   │   │   ├── energy-monitor.html
 │   │   │   ├── trainspotter.html
 │   │   │   └── incognita.html
 │   │   └── static/dashboard/
 │   │       ├── css/{shared,components}.css
+│   │       ├── js/sidebar.js        # collapse toggle, state in localStorage
 │   │       └── js/dashboard-lib.js  # chart builders, stat fillers, log section, initDashboard()
 │   ├── config.py                # legacy Typer config CLI
 │   └── env.py                   # .env secrets
@@ -315,9 +319,9 @@ Adding a dashboard for a new project means dropping a template file — no Pytho
    ```
 2. In `{% block script %}`, call `initDashboard({ project, loadFn, defaultWindowAmount, defaultWindowUnit, defaultRollupMinutes })` from `static/dashboard/js/dashboard-lib.js`. `loadFn(win, signal)` fires on load, on control changes, and every 30s.
 3. Build sections with the shared helpers, all reading from the Dashboard API above: `buildLineChart`, `buildBarChart`, `buildStackedBarChart` (Chart.js canvases), `fillStats`, `fillDerivedStat` (stat elements by id).
-4. Reuse existing CSS classes from `static/dashboard/css/{shared,components}.css` — `.card`, `.card-full`, `.stat-grid`, `.chart-card`, `.chart-card--inset`, `.ts-top-row`, `.em-stat-row` — rather than adding new ones.
+4. Reuse existing CSS classes from `static/dashboard/css/{shared,components}.css` — `.card`, `.card-full`, `.stat-grid`, `.chart-card`, `.chart-card--inset`, `.ts-top-row`, `.em-stat-row` — rather than adding new ones. Write label text in sentence case; no stylesheet uppercases it for you, and nothing in the UI is set in all caps except log levels, which arrive capitalised as data.
 
-`_base.html` provides the sidebar (auto-populated from every `templates/dashboard/*.html` except `_base`/`index`), time-window controls, and the full log section (histogram, filterable table, traceback rendering, pattern grouping) — none of that is per-project.
+`_base.html` provides the sidebar via `_sidebar.html` (auto-populated from every `templates/dashboard/*.html` except partials/`index`), time-window controls, and the full log section (histogram, filterable table, traceback rendering, pattern grouping) — none of that is per-project.
 
 Reference dashboards: `energy-monitor.html`, `trainspotter.html`, `incognita.html`. `docs/*-dashboard-handoff.md` record metric-naming changes behind an existing dashboard (e.g. a metric rename or removal) — not build instructions.
 

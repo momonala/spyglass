@@ -10,6 +10,8 @@ from flask import jsonify
 from flask import request
 from sqlalchemy import select
 
+from spyglass.db.metric_names import get_or_create_name_id
+from spyglass.db.metric_names import name_to_id_map
 from spyglass.db.models import LogEntry
 from spyglass.db.models import MetricPoint
 from spyglass.db.models import MetricType
@@ -68,27 +70,30 @@ def ingest_metrics() -> tuple[Response, int]:
 
     raw_points = _unwrap_batch(data, "points")
 
-    rows = []
+    parsed = []
     for p in raw_points:
         if not p.get("name") or not p.get("metric_type"):
             return jsonify({"error": "each point requires name and metric_type"}), 400
         metric_type, err = _validate_metric_type(p["metric_type"])
         if err is not None:
             return err, 400
-        tags = p.get("tags")
-        rows.append(
-            MetricPoint(
-                timestamp=parse_timestamp(p.get("timestamp")),
-                name=p["name"],
-                metric_type=metric_type.value,
-                value=float(p.get("value", 0)),
-                tags=json.dumps(tags) if tags is not None else None,
-            )
-        )
+        parsed.append((p, metric_type))
 
     store = _store()
     slug = store.get_slug(project)
     with store.metrics_session(slug) as session:
+        rows = []
+        for p, metric_type in parsed:
+            tags = p.get("tags")
+            rows.append(
+                MetricPoint(
+                    timestamp=parse_timestamp(p.get("timestamp")),
+                    name_id=get_or_create_name_id(session, p["name"]),
+                    metric_type=metric_type.value,
+                    value=float(p.get("value", 0)),
+                    tags=json.dumps(tags) if tags is not None else None,
+                )
+            )
         session.add_all(rows)
         session.commit()
 
@@ -111,14 +116,12 @@ def ingest_logs() -> tuple[Response, int]:
     for e in raw_entries:
         if not e.get("message"):
             return jsonify({"error": "each entry requires message"}), 400
-        extra = e.get("extra")
         rows.append(
             LogEntry(
                 timestamp=parse_timestamp(e.get("timestamp")),
                 level=e.get("level", "INFO").upper(),
                 logger_name=e.get("logger_name", ""),
                 message=e["message"],
-                extra=json.dumps(extra) if extra is not None else None,
             )
         )
 
@@ -139,8 +142,6 @@ def query_metrics() -> Response:
 
     stmt = select(MetricPoint).order_by(MetricPoint.timestamp.desc())
 
-    if name_prefix := request.args.get("name"):
-        stmt = stmt.where(MetricPoint.name.startswith(name_prefix))
     if raw_type := request.args.get("metric_type"):
         metric_type, err = _validate_metric_type(raw_type)
         if err is not None:
@@ -158,13 +159,18 @@ def query_metrics() -> Response:
     store = _store()
     slug = store.get_slug(project)
     with store.metrics_session(slug) as session:
+        names = name_to_id_map(session)
+        if name_prefix := request.args.get("name"):
+            matching_ids = [id_ for name, id_ in names.items() if name.startswith(name_prefix)]
+            stmt = stmt.where(MetricPoint.name_id.in_(matching_ids))
         rows = session.execute(stmt).scalars().all()
+        id_to_name = {id_: name for name, id_ in names.items()}
 
     return jsonify(
         [
             {
                 "timestamp": r.timestamp.isoformat() + "Z",
-                "name": r.name,
+                "name": id_to_name[r.name_id],
                 "metric_type": r.metric_type,
                 "value": r.value,
                 "tags": json.loads(r.tags) if r.tags else None,
@@ -205,7 +211,6 @@ def query_logs() -> Response:
                 "level": r.level,
                 "logger_name": r.logger_name,
                 "message": r.message,
-                "extra": json.loads(r.extra) if r.extra else None,
             }
             for r in rows
         ]

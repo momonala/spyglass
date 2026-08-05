@@ -33,10 +33,8 @@ h1 {
 }
 
 .eyebrow {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
   color: var(--label-tertiary);
   margin: 0 0 2px;
 }
@@ -221,10 +219,8 @@ h1 {
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 500;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
   color: var(--label-tertiary);
 }
 
@@ -293,11 +289,9 @@ h1 {
 .chart-title {
   margin: 0 0 10px;
   flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: var(--label-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--label-secondary);
 }
 
 .chart-card canvas {
@@ -322,10 +316,8 @@ h1 {
 .data-table th {
   text-align: left;
   padding: 6px 8px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
   color: var(--label-tertiary);
   border-bottom: 0.5px solid var(--separator);
 }
@@ -352,7 +344,8 @@ h1 {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.3px;
-  text-transform: uppercase;
+  /* No text-transform: log levels arrive capitalised as data ("ERROR"), which
+     is the domain's own notation rather than a styling choice. */
   font-family: var(--font-mono);
   white-space: nowrap;
   background: var(--fill);
@@ -409,10 +402,8 @@ h1 {
 .filter-group-grow { flex: 1 1 180px; }
 
 .filter-label {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 500;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
   color: var(--label-tertiary);
 }
 
@@ -586,34 +577,113 @@ h1 {
 
 /* ── Index page ────────────────────────────────────────── */
 
-.index-grid {
+.project-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 1rem;
-  padding: 2rem;
-  max-width: 900px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 16px var(--page-gutter) 32px;
+  max-width: 1200px;
 }
 
-.project-link {
-  display: block;
-  padding: 1.25rem 1.5rem;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 0.5px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--glass-specular), 0 4px 24px rgba(0, 0, 0, 0.3);
-  color: var(--label);
+.project-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   text-decoration: none;
-  font-size: 0.875rem;
-  font-weight: 500;
+  color: inherit;
   transition: background 0.15s, border-color 0.15s;
 }
 
-.project-link:hover {
+.project-card:hover {
   background: var(--fill-hover);
   border-color: var(--accent);
+}
+
+.project-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* Stat tiles read value-then-label here: the numbers are what you scan, and
+   the card is too small for the label to earn the top line. */
+.project-card-stats .stat { gap: 1px; }
+.project-card-stats .stat-value { font-size: 19px; }
+
+.project-card-stats .stat-value.is-zero { color: var(--label-tertiary); }
+
+.project-card-activity {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* The baseline grounds the bars — without it a window that is only partly
+   populated reads as a chart floating in space. */
+.sparkline,
+.sparkline--empty {
+  flex: 1;
+  height: 22px;
+  min-width: 0;
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.sparkline {
+  display: block;
+  fill: var(--sparkline-bar);
+  transition: fill 0.15s;
+}
+
+.project-card:hover .sparkline { fill: var(--sparkline-bar-hover); }
+
+.project-card-activity-label {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
   color: var(--label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Pushed right so the age reads as metadata about the row, not a second title. */
+.project-card-age {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Staleness is the one thing the numbers can't show, so it colours the age
+   rather than getting a status dot of its own. */
+.project-card-age.is-stale { color: var(--warning); }
+
+.project-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.project-card-stats .stat-value { font-size: 16px; }
+
+/* Footer for secondary facts that don't earn a stat tile. No rule of its own —
+   the sparkline's baseline sits right above it and already divides the card. */
+.project-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 10px;
+  font-size: 11px;
+  color: var(--label-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Top-row layout (50 / 25 / 25, or 2/3 - 1/3 with --two) ─ */
@@ -765,10 +835,11 @@ h1 {
 }
 
 .sidebar-brand-link {
-  display: block;
+  display: flex;
+  align-items: center;
   font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
   color: var(--label);
   text-decoration: none;
 }
@@ -779,32 +850,75 @@ h1 {
   padding: 10px 8px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .sidebar-section-label {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
   color: var(--label-tertiary);
-  padding: 0 8px;
-  margin-bottom: 4px;
+  padding: 0 10px;
+  margin-bottom: 6px;
 }
 
 .sidebar-link {
-  display: block;
-  padding: 5px 8px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px 6px 14px;
   border-radius: var(--radius-sm);
   color: var(--label-secondary);
   text-decoration: none;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+  overflow: hidden;
   transition: background 0.12s, color 0.12s;
 }
 
-.sidebar-link:hover   { background: var(--fill-hover); color: var(--label); }
-.sidebar-link.is-active { background: var(--fill); color: var(--label); }
+.sidebar-link::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: translateY(-50%);
+  transition: height 0.15s ease;
+}
+
+.sidebar-link-mark {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--fill);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--label-secondary);
+}
+
+.sidebar-link-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-link:hover { background: var(--fill-hover); color: var(--label); }
+
+.sidebar-link.is-active {
+  background: var(--fill);
+  color: var(--label);
+}
+
+.sidebar-link.is-active::before { height: 14px; }
 
 /* ── Sidebar collapse ──────────────────────────────────── */
 
@@ -812,16 +926,14 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   margin-left: auto;
   padding: 0;
   background: transparent;
   border: 0.5px solid var(--separator);
   border-radius: var(--radius-sm);
   color: var(--label-tertiary);
-  font-size: 14px;
-  line-height: 1;
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s;
   flex-shrink: 0;
@@ -834,12 +946,39 @@ body.sidebar-collapsed .sidebar {
 }
 
 body.sidebar-collapsed .sidebar-brand {
-  padding: 14px 10px 12px;
+  justify-content: center;
+  padding: 14px 6px 12px;
 }
 
-body.sidebar-collapsed .sidebar-brand-link,
+/* No room for the wordmark in the rail — the toggle is the only affordance left. */
+body.sidebar-collapsed .sidebar-brand-link { display: none; }
+
+body.sidebar-collapsed .sidebar-collapse-btn { margin-left: 0; }
+
 body.sidebar-collapsed .sidebar-nav {
-  display: none;
+  align-items: center;
+  padding: 10px 4px;
+  gap: 4px;
+}
+
+body.sidebar-collapsed .sidebar-section-label { display: none; }
+
+body.sidebar-collapsed .sidebar-link {
+  padding: 0;
+  width: 26px;
+  height: 26px;
+  justify-content: center;
+}
+
+body.sidebar-collapsed .sidebar-link::before { left: -3px; }
+
+body.sidebar-collapsed .sidebar-link-text { display: none; }
+
+body.sidebar-collapsed .sidebar-link-mark { display: flex; }
+
+body.sidebar-collapsed .sidebar-link.is-active .sidebar-link-mark {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 body.sidebar-collapsed {

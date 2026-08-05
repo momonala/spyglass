@@ -331,7 +331,6 @@ def prepare_logs(logs: list[dict]) -> list[PreparedLogEntry]:
                 logger_name=log.get("logger_name", ""),
                 message=message,
                 function=function,
-                extra=log.get("extra"),
             )
         )
     entries.sort(key=lambda e: e.timestamp, reverse=True)

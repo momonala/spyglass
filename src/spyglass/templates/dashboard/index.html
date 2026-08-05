@@ -12,17 +12,9 @@
   <link rel="stylesheet" href="/dashboard/static/css/components.css">
 </head>
 <body>
-<nav class="sidebar" aria-label="Project navigation">
-  <div class="sidebar-brand">
-    <a class="sidebar-brand-link" href="/dashboard/">spyglass</a>
-  </div>
-  <div class="sidebar-nav">
-    <span class="sidebar-section-label">Dashboards</span>
-    {% for project in projects %}
-    <a class="sidebar-link" href="/dashboard/{{ project }}">{{ project }}</a>
-    {% endfor %}
-  </div>
-</nav>
+
+{% include "dashboard/_sidebar.html" %}
+
 <header class="page-header">
   <div class="header-row">
     <div>
@@ -31,12 +23,45 @@
     </div>
   </div>
 </header>
-<main>
-  <div class="index-grid">
-    {% for project in projects %}
-    <a class="project-link" href="/dashboard/{{ project }}">{{ project }}</a>
-    {% endfor %}
-  </div>
+
+<main class="project-grid">
+  {% for p in health %}
+  <a class="card project-card" href="/dashboard/{{ p.slug }}">
+    <div class="project-card-head">
+      <span class="project-card-name">{{ p.project }}</span>
+      <span class="project-card-age{% if p.status == 'stale' %} is-stale{% endif %}"
+            {% if p.last_activity %}title="{{ p.last_activity.strftime('%Y-%m-%d %H:%M') }} UTC"{% endif %}>{{ p.last_activity | timeago }}</span>
+    </div>
+
+    <div class="project-card-stats">
+      <div class="stat">
+        <span class="stat-value">{{ p.log_count | compact }}</span>
+        <span class="stat-label">logs</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">{{ p.metric_count | compact }}</span>
+        <span class="stat-label">metrics</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value{% if p.error_count_24h %} stat-danger{% else %} is-zero{% endif %}">{{ p.error_count_24h | compact }}</span>
+        <span class="stat-label">errors, 24h</span>
+      </div>
+    </div>
+
+    <div class="project-card-activity" title="Rows written per hour over the last {{ activity_hours }} hours">
+      {{ p.activity | sparkline }}
+      <span class="project-card-activity-label">{{ activity_hours }}h</span>
+    </div>
+
+    <div class="project-card-meta">
+      <span>{{ p.db_size_bytes | filesizeformat }} on disk</span>
+      <span>{{ p.retention_days }}-day retention</span>
+    </div>
+  </a>
+  {% endfor %}
 </main>
+
+<script src="/dashboard/static/js/sidebar.js"></script>
+
 </body>
 </html>

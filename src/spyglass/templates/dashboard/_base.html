@@ -19,18 +19,7 @@
   <source src="/dashboard/static/abstract-background.webm" type="video/webm">
 </video>
 
-<nav class="sidebar" id="sidebar" aria-label="Project navigation">
-  <div class="sidebar-brand">
-    <a class="sidebar-brand-link" href="/dashboard/">spyglass</a>
-    <button class="sidebar-collapse-btn" id="sidebarToggle" aria-label="Toggle sidebar" title="Toggle sidebar"></button>
-  </div>
-  <div class="sidebar-nav">
-    <span class="sidebar-section-label">Dashboards</span>
-    {% for p in projects %}
-    <a class="sidebar-link{% if p == project %} is-active{% endif %}" href="/dashboard/{{ p }}">{{ p }}</a>
-    {% endfor %}
-  </div>
-</nav>
+{% include "dashboard/_sidebar.html" %}
 
 <header class="page-header">
   <div class="header-row">
@@ -145,33 +134,7 @@
 
 <script src="/dashboard/static/js/dashboard-lib.js"></script>
 {% block script %}{% endblock %}
-<script>
-  (function () {
-    const sidebar = document.getElementById('sidebar');
-    const toggle  = document.getElementById('sidebarToggle');
-    const COLLAPSED = 'sidebar-collapsed';
-
-    function chevron(collapsed) {
-      return collapsed
-        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
-        : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
-    }
-
-    function apply(collapsed) {
-      document.body.classList.toggle(COLLAPSED, collapsed);
-      toggle.innerHTML = chevron(collapsed);
-      toggle.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
-    }
-
-    apply(localStorage.getItem('sidebarCollapsed') === '1');
-
-    toggle.addEventListener('click', () => {
-      const next = !document.body.classList.contains(COLLAPSED);
-      localStorage.setItem('sidebarCollapsed', next ? '1' : '0');
-      apply(next);
-    });
-  })();
-</script>
+<script src="/dashboard/static/js/sidebar.js"></script>
 
 </body>
 </html>

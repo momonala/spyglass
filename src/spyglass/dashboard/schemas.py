@@ -13,7 +13,6 @@ class PreparedLogEntry(BaseModel):
     logger_name: str
     message: str
     function: str | None = None
-    extra: dict | None = None
 
 
 class TimingSummary(BaseModel):

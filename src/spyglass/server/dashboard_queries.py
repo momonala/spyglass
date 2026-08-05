@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 from pathlib import Path
 from typing import Any
@@ -11,10 +12,18 @@ from sqlalchemy import Integer
 from sqlalchemy import cast
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
+from spyglass.db.metric_names import get_name_id
+from spyglass.db.models import LogEntry
+from spyglass.db.models import MetricName
 from spyglass.db.models import MetricPoint
 from spyglass.db.models import MetricType
 from spyglass.db.store import ProjectStore
+
+_ERROR_LEVELS = ("ERROR", "CRITICAL")
+_STALE_AFTER = timedelta(hours=24)
+ACTIVITY_HOURS = 48
 
 LAYOUT_VERSION = 1
 ALLOWED_WIDGET_TYPES = frozenset({"series", "summary", "histogram"})
@@ -60,11 +69,13 @@ def _tag_filter_clauses(tags: dict[str, str] | None) -> list[Any]:
     return [func.json_extract(MetricPoint.tags, f"$.{key}") == value for key, value in tags.items()]
 
 
-def _select_values_stmt(name: str, from_ts: datetime, to_ts: datetime, tag_clauses: list[Any]) -> Any:
+def _select_values_stmt(
+    name_id: int | None, from_ts: datetime, to_ts: datetime, tag_clauses: list[Any]
+) -> Any:
     """Build a SELECT for a metric's raw values within a time window."""
     return (
         select(MetricPoint.value)
-        .where(MetricPoint.name == name)
+        .where(MetricPoint.name_id == name_id)
         .where(MetricPoint.timestamp >= from_ts)
         .where(MetricPoint.timestamp <= to_ts)
         .where(*tag_clauses)
@@ -101,23 +112,110 @@ def list_projects(store: ProjectStore) -> list[dict]:
     return [{"slug": slug, "project": store.get_project_name(slug)} for slug in sorted(store.all_slugs())]
 
 
+def _hourly_counts(session: Any, model: Any, since: datetime, hours: int) -> list[int]:
+    """Count rows per clock hour since `since`, as a dense list of length `hours`."""
+    hour_col = cast(cast(model.timestamp, Float) / 3600, Integer).label("hour")
+    rows = session.execute(
+        select(hour_col, func.count()).where(model.timestamp >= since).group_by(hour_col)
+    ).all()
+    first_hour = int(since.replace(tzinfo=timezone.utc).timestamp() // 3600)
+    counts = [0] * hours
+    for hour, count in rows:
+        index = int(hour) - first_hour
+        if 0 <= index < hours:
+            counts[index] = count
+    return counts
+
+
+def project_health(store: ProjectStore, slug: str) -> dict:
+    """Compute DB size, row counts, and freshness for one project.
+
+    status is "error" if any ERROR/CRITICAL log landed in the last 24h,
+    "stale" if nothing has been written in that window, else "healthy".
+    """
+    db_size_bytes = sum(f.stat().st_size for f in store.project_dir(slug).glob("*.db"))
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    activity_since = now - timedelta(hours=ACTIVITY_HOURS - 1)
+
+    try:
+        with store.logs_session(slug) as session:
+            log_count, last_log_at = session.execute(
+                select(func.count(LogEntry.id), func.max(LogEntry.timestamp))
+            ).one()
+            error_count_24h = session.execute(
+                select(func.count(LogEntry.id))
+                .where(LogEntry.level.in_(_ERROR_LEVELS))
+                .where(LogEntry.timestamp >= now - _STALE_AFTER)
+            ).scalar_one()
+            log_activity = _hourly_counts(session, LogEntry, activity_since, ACTIVITY_HOURS)
+        logs_ok = True
+    except OperationalError:
+        log_count, last_log_at, error_count_24h, logs_ok = 0, None, 0, False
+        log_activity = [0] * ACTIVITY_HOURS
+
+    try:
+        with store.metrics_session(slug) as session:
+            metric_count, last_metric_at = session.execute(
+                select(func.count(MetricPoint.id), func.max(MetricPoint.timestamp))
+            ).one()
+            metric_activity = _hourly_counts(session, MetricPoint, activity_since, ACTIVITY_HOURS)
+        metrics_ok = True
+    except OperationalError:
+        metric_count, last_metric_at, metrics_ok = 0, None, False
+        metric_activity = [0] * ACTIVITY_HOURS
+
+    last_activity = max(filter(None, (last_log_at, last_metric_at)), default=None)
+    if not (logs_ok and metrics_ok):
+        status = "error"
+    elif error_count_24h:
+        status = "error"
+    elif last_activity is None or now - last_activity > _STALE_AFTER:
+        status = "stale"
+    else:
+        status = "healthy"
+
+    return {
+        "slug": slug,
+        "project": store.get_project_name(slug),
+        "db_size_bytes": db_size_bytes,
+        "log_count": log_count,
+        "metric_count": metric_count,
+        "error_count_24h": error_count_24h,
+        "last_activity": last_activity,
+        "activity": [logs + metrics for logs, metrics in zip(log_activity, metric_activity)],
+        "retention_days": store.get_retention_days(slug),
+        "status": status,
+    }
+
+
+def list_project_health(store: ProjectStore) -> list[dict]:
+    """Return project_health() for every known project, sorted by slug."""
+    return [project_health(store, slug) for slug in sorted(store.all_slugs())]
+
+
 def list_metric_names(store: ProjectStore, project: str) -> list[dict]:
     """Return distinct metric names and types for a project."""
     slug = store.get_slug(project)
-    stmt = select(MetricPoint.name, MetricPoint.metric_type).distinct().order_by(MetricPoint.name)
+    stmt = (
+        select(MetricName.name, MetricPoint.metric_type)
+        .join(MetricPoint, MetricPoint.name_id == MetricName.id)
+        .distinct()
+        .order_by(MetricName.name)
+    )
     with store.metrics_session(slug) as session:
         rows = session.execute(stmt).all()
     return [{"name": r.name, "metric_type": r.metric_type} for r in rows]
 
 
 def _metric_type_for_name(store: ProjectStore, slug: str, name: str) -> str | None:
-    stmt = (
-        select(MetricPoint.metric_type)
-        .where(MetricPoint.name == name)
-        .order_by(MetricPoint.timestamp.desc())
-        .limit(1)
-    )
     with store.metrics_session(slug) as session:
+        name_id = get_name_id(session, name)
+        stmt = (
+            select(MetricPoint.metric_type)
+            .where(MetricPoint.name_id == name_id)
+            .order_by(MetricPoint.timestamp.desc())
+            .limit(1)
+        )
         return session.execute(stmt).scalar_one_or_none()
 
 
@@ -139,17 +237,17 @@ def query_metric_series(
     bucket_col = _bucket_expr(interval_seconds)
     agg_col = _aggregate_expr(metric_type or MetricType.COUNTER.value)
 
-    stmt = (
-        select(bucket_col, agg_col)
-        .where(MetricPoint.name == name)
-        .where(MetricPoint.timestamp >= from_ts)
-        .where(MetricPoint.timestamp <= to_ts)
-        .where(*_tag_filter_clauses(tags))
-        .group_by(bucket_col)
-        .order_by(bucket_col)
-    )
-
     with store.metrics_session(slug) as session:
+        name_id = get_name_id(session, name)
+        stmt = (
+            select(bucket_col, agg_col)
+            .where(MetricPoint.name_id == name_id)
+            .where(MetricPoint.timestamp >= from_ts)
+            .where(MetricPoint.timestamp <= to_ts)
+            .where(*_tag_filter_clauses(tags))
+            .group_by(bucket_col)
+            .order_by(bucket_col)
+        )
         rows = session.execute(stmt).all()
 
     points = [
@@ -178,34 +276,36 @@ def query_metric_summary(
     metric_type = _metric_type_for_name(store, slug, name)
     tag_clauses = _tag_filter_clauses(tags)
 
-    window_filter = [
-        MetricPoint.name == name,
-        MetricPoint.timestamp >= from_ts,
-        MetricPoint.timestamp <= to_ts,
-        *tag_clauses,
-    ]
-
-    latest_stmt = (
-        select(MetricPoint.value)
-        .where(MetricPoint.name == name, *tag_clauses)
-        .order_by(MetricPoint.timestamp.desc())
-        .limit(1)
-    )
-    agg_stmt = select(
-        func.sum(MetricPoint.value).label("total"),
-        func.min(MetricPoint.value).label("minimum"),
-        func.avg(MetricPoint.value).label("average"),
-        func.max(MetricPoint.value).label("maximum"),
-    ).where(*window_filter)
-
     with store.metrics_session(slug) as session:
+        name_id = get_name_id(session, name)
+
+        window_filter = [
+            MetricPoint.name_id == name_id,
+            MetricPoint.timestamp >= from_ts,
+            MetricPoint.timestamp <= to_ts,
+            *tag_clauses,
+        ]
+
+        latest_stmt = (
+            select(MetricPoint.value)
+            .where(MetricPoint.name_id == name_id, *tag_clauses)
+            .order_by(MetricPoint.timestamp.desc())
+            .limit(1)
+        )
+        agg_stmt = select(
+            func.sum(MetricPoint.value).label("total"),
+            func.min(MetricPoint.value).label("minimum"),
+            func.avg(MetricPoint.value).label("average"),
+            func.max(MetricPoint.value).label("maximum"),
+        ).where(*window_filter)
+
         latest = session.execute(latest_stmt).scalar_one_or_none()
         agg = session.execute(agg_stmt).one_or_none()
         timing_values: list[float] | None = None
         if metric_type == MetricType.TIMING.value:
             timing_values = [
                 float(v)
-                for v in session.execute(_select_values_stmt(name, from_ts, to_ts, tag_clauses)).scalars()
+                for v in session.execute(_select_values_stmt(name_id, from_ts, to_ts, tag_clauses)).scalars()
             ]
 
     total = agg.total if agg else None
@@ -242,15 +342,16 @@ def query_metric_tag_values(
     slug = store.get_slug(project)
     path = f"$.{key}"
     tag_col = func.json_extract(MetricPoint.tags, path).label("tag_value")
-    stmt = (
-        select(tag_col)
-        .where(MetricPoint.name == name)
-        .where(MetricPoint.tags.isnot(None))
-        .where(tag_col.isnot(None))
-        .distinct()
-        .order_by(tag_col)
-    )
     with store.metrics_session(slug) as session:
+        name_id = get_name_id(session, name)
+        stmt = (
+            select(tag_col)
+            .where(MetricPoint.name_id == name_id)
+            .where(MetricPoint.tags.isnot(None))
+            .where(tag_col.isnot(None))
+            .distinct()
+            .order_by(tag_col)
+        )
         values = [row.tag_value for row in session.execute(stmt).all()]
     return {"key": key, "values": values}
 
@@ -272,7 +373,9 @@ def query_metric_histogram_multi(
         values_by_name = {
             name: [
                 float(v)
-                for v in session.execute(_select_values_stmt(name, from_ts, to_ts, tag_clauses)).scalars()
+                for v in session.execute(
+                    _select_values_stmt(get_name_id(session, name), from_ts, to_ts, tag_clauses)
+                ).scalars()
             ]
             for name in names
         }

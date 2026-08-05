@@ -15,35 +15,6 @@ from spyglass.client.http_client import create_session
 from spyglass.client.http_client import silence_client_transport_loggers
 
 
-def _extract_extra(record: logging.LogRecord) -> dict | None:
-    """Pull non-standard fields off a LogRecord into a dict for remote storage."""
-    standard_fields = {
-        "name",
-        "msg",
-        "args",
-        "levelname",
-        "levelno",
-        "pathname",
-        "filename",
-        "module",
-        "exc_info",
-        "exc_text",
-        "stack_info",
-        "lineno",
-        "funcName",
-        "created",
-        "msecs",
-        "relativeCreated",
-        "thread",
-        "threadName",
-        "processName",
-        "process",
-        "message",
-    }
-    extra = {k: v for k, v in record.__dict__.items() if k not in standard_fields}
-    return extra or None
-
-
 class SpyglassHandler(logging.Handler):
     """Logging handler that POSTs log records to the Spyglass server.
 
@@ -73,7 +44,6 @@ class SpyglassHandler(logging.Handler):
                         "level": record.levelname,
                         "logger_name": record.name,
                         "message": self.format(record),
-                        "extra": _extract_extra(record),
                     }
                 ],
             }

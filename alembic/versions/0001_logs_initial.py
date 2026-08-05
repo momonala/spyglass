@@ -1,8 +1,8 @@
-"""Create log_entries with autoincrement id PK (migrates tables using timestamp as PK).
+"""Create log_entries.
 
 Revision ID: 0001_logs
 Revises:
-Create Date: 2026-06-08
+Create Date: 2026-08-05
 """
 
 from __future__ import annotations
@@ -19,39 +19,14 @@ depends_on = None
 
 def upgrade() -> None:
     conn = op.get_bind()
-    table_exists = conn.execute(
-        text("SELECT name FROM sqlite_master WHERE type='table' AND name='log_entries'")
-    ).fetchone()
-
-    if table_exists:
-        col_names = {row[1] for row in conn.execute(text("PRAGMA table_info(log_entries)"))}
-        if "id" in col_names:
-            return
-        conn.execute(text("ALTER TABLE log_entries RENAME TO _log_entries_old"))
-        conn.execute(text("DROP INDEX IF EXISTS ix_log_level_ts"))
-        conn.execute(text("DROP INDEX IF EXISTS ix_log_entries_timestamp"))
-        _create_table(conn)
-        conn.execute(
-            text(
-                "INSERT INTO log_entries (timestamp, level, logger_name, message, extra) "
-                "SELECT timestamp, level, logger_name, message, extra FROM _log_entries_old"
-            )
-        )
-        conn.execute(text("DROP TABLE _log_entries_old"))
-    else:
-        _create_table(conn)
-
-
-def _create_table(conn) -> None:  # type: ignore[no-untyped-def]
     conn.execute(
         text(
             "CREATE TABLE log_entries ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "timestamp DATETIME NOT NULL, "
+            "timestamp REAL NOT NULL, "
             "level VARCHAR NOT NULL, "
             "logger_name VARCHAR NOT NULL, "
-            "message TEXT NOT NULL, "
-            "extra TEXT)"
+            "message TEXT NOT NULL)"
         )
     )
     conn.execute(text("CREATE INDEX ix_log_level_ts ON log_entries (level, timestamp)"))

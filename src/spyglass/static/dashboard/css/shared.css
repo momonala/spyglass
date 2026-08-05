@@ -12,6 +12,7 @@
 
   /* Accent */
   --accent:         #0a84ff;
+  --accent-soft:    rgba(10, 132, 255, 0.14);
 
   /* Text */
   --label:          rgba(255, 255, 255, 0.92);
@@ -51,6 +52,11 @@
 
   /* Chart heights */
   --chart-height: 180px;
+
+  /* Sparkline bars: heavier than --label-tertiary so dense bars stay legible,
+     lighter than body text so they never compete with the stat values. */
+  --sparkline-bar:       rgba(255, 255, 255, 0.38);
+  --sparkline-bar-hover: rgba(255, 255, 255, 0.62);
 
   /* Danger text (softer than --danger for body copy) */
   --danger-text: #ff6961;

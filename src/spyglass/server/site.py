@@ -1,6 +1,8 @@
 """Dashboard site blueprint: static UI and dashboard-specific JSON API."""
 
 import re
+from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 
 from flask import Blueprint
@@ -11,6 +13,7 @@ from flask import redirect
 from flask import render_template
 from flask import request
 from jinja2 import TemplateNotFound
+from markupsafe import Markup
 
 from spyglass.db.store import ProjectStore
 from spyglass.server import dashboard_queries
@@ -32,6 +35,55 @@ _TEMPLATE_DIR = Path(__file__).parent.parent / "templates" / "dashboard"
 
 def _store() -> ProjectStore:
     return current_app.config["STORE"]
+
+
+@site.app_template_filter("timeago")
+def _timeago(when: datetime | None) -> str:
+    """Render a naive-UTC timestamp as a short relative age, e.g. "4h ago"."""
+    if when is None:
+        return "no data"
+    seconds = (datetime.now(timezone.utc).replace(tzinfo=None) - when).total_seconds()
+    for unit_seconds, suffix in ((86400, "d"), (3600, "h"), (60, "m")):
+        if seconds >= unit_seconds:
+            return f"{int(seconds // unit_seconds)}{suffix} ago"
+    return "just now"
+
+
+@site.app_template_filter("sparkline")
+def _sparkline(values: list[int]) -> Markup:
+    """Render bucketed counts as a bare inline SVG bar chart (no axes, no JS).
+
+    The viewBox is stretched to the container width, so bar geometry is in
+    arbitrary units and only the relative heights carry meaning.
+    """
+    peak = max(values, default=0)
+    if not peak:
+        return Markup('<div class="sparkline sparkline--empty" aria-hidden="true"></div>')
+
+    width, height = 100.0, 24.0
+    slot = width / len(values)
+    bars = "".join(
+        # Empty buckets draw nothing — a minimum-height bar would turn a quiet
+        # stretch into a dashed line that reads as data.
+        f'<rect x="{i * slot:.3f}" y="{height - v / peak * height:.2f}"'
+        f' width="{slot * 0.72:.3f}" height="{v / peak * height:.2f}"/>'
+        for i, v in enumerate(values)
+        if v
+    )
+    return Markup(
+        f'<svg class="sparkline" viewBox="0 0 {width:g} {height:g}" preserveAspectRatio="none"'
+        f' aria-hidden="true">{bars}</svg>'
+    )
+
+
+@site.app_template_filter("compact")
+def _compact(value: int) -> str:
+    """Abbreviate a count so it fits a stat tile: 1_204 -> "1.2k"."""
+    for threshold, suffix in ((1_000_000_000, "b"), (1_000_000, "m"), (1_000, "k")):
+        if value >= threshold:
+            scaled = value / threshold
+            return f"{scaled:.1f}{suffix}" if scaled < 10 else f"{scaled:.0f}{suffix}"
+    return str(value)
 
 
 def _require_project() -> str:
@@ -75,7 +127,12 @@ def _list_project_templates() -> list[str]:
 
 @site.get("/dashboard/")
 def dashboard_index():
-    return render_template("dashboard/index.html", projects=_list_project_templates())
+    return render_template(
+        "dashboard/index.html",
+        projects=_list_project_templates(),
+        health=dashboard_queries.list_project_health(_store()),
+        activity_hours=dashboard_queries.ACTIVITY_HOURS,
+    )
 
 
 @site.get("/")

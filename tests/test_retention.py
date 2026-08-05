@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy import text
 
+from spyglass.db.metric_names import get_or_create_name_id
 from spyglass.db.models import LogEntry
 from spyglass.db.models import MetricPoint
 from spyglass.db.store import ProjectStore
@@ -21,7 +22,8 @@ def _utcnow() -> datetime:
 def _insert_metric(store: ProjectStore, slug: str, days_old: int) -> None:
     ts = _utcnow() - timedelta(days=days_old)
     with store.metrics_session(slug) as session:
-        session.add(MetricPoint(timestamp=ts, name="test.fn.c", metric_type="counter", value=1))
+        name_id = get_or_create_name_id(session, "test.fn.c")
+        session.add(MetricPoint(timestamp=ts, name_id=name_id, metric_type="counter", value=1))
         session.commit()
 
 
