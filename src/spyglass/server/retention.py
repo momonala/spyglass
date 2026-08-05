@@ -25,34 +25,44 @@ def _vacuum(engine: Engine) -> None:
 
 
 def run_retention(store: ProjectStore) -> None:
-    """Delete stale rows from every known project's metrics and logs DBs, then vacuum."""
+    """Delete stale rows from every known project's metrics and logs DBs, then vacuum.
+
+    One project's DB error (e.g. corruption) must not stop retention for the rest.
+    """
     for slug in store.all_slugs():
-        retention_days = store.get_retention_days(slug)
-        cutoff = utcnow() - timedelta(days=retention_days)
+        try:
+            _run_retention_for_project(store, slug)
+        except Exception:
+            logger.exception("Retention [%s]: failed, skipping this project", slug)
 
-        with store.metrics_session(slug) as session:
-            result = session.execute(delete(MetricPoint).where(MetricPoint.timestamp < cutoff))
-            session.commit()
-            deleted_metrics = result.rowcount
 
-        with store.logs_session(slug) as session:
-            result = session.execute(delete(LogEntry).where(LogEntry.timestamp < cutoff))
-            session.commit()
-            deleted_logs = result.rowcount
+def _run_retention_for_project(store: ProjectStore, slug: str) -> None:
+    retention_days = store.get_retention_days(slug)
+    cutoff = utcnow() - timedelta(days=retention_days)
 
-        if deleted_metrics:
-            _vacuum(store.metrics_engine(slug))
-        if deleted_logs:
-            _vacuum(store.logs_engine(slug))
+    with store.metrics_session(slug) as session:
+        result = session.execute(delete(MetricPoint).where(MetricPoint.timestamp < cutoff))
+        session.commit()
+        deleted_metrics = result.rowcount
 
-        if deleted_metrics or deleted_logs:
-            logger.info(
-                "Retention [%s]: removed %d metrics, %d logs (cutoff=%s)",
-                slug,
-                deleted_metrics,
-                deleted_logs,
-                cutoff.date(),
-            )
+    with store.logs_session(slug) as session:
+        result = session.execute(delete(LogEntry).where(LogEntry.timestamp < cutoff))
+        session.commit()
+        deleted_logs = result.rowcount
+
+    if deleted_metrics:
+        _vacuum(store.metrics_engine(slug))
+    if deleted_logs:
+        _vacuum(store.logs_engine(slug))
+
+    if deleted_metrics or deleted_logs:
+        logger.info(
+            "Retention [%s]: removed %d metrics, %d logs (cutoff=%s)",
+            slug,
+            deleted_metrics,
+            deleted_logs,
+            cutoff.date(),
+        )
 
 
 def start_retention_thread(store: ProjectStore) -> threading.Thread:

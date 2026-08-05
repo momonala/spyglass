@@ -6,6 +6,7 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import Float
 from sqlalchemy import Integer
 from sqlalchemy import cast
 from sqlalchemy import func
@@ -35,8 +36,10 @@ def auto_interval_seconds(
 
 
 def _bucket_expr(interval_seconds: int) -> Any:
-    unix_ts = cast(func.strftime("%s", MetricPoint.timestamp), Integer)
-    return cast(unix_ts / interval_seconds, Integer).label("bucket")
+    # Cast to plain Float first: dividing the EpochDateTime column directly would make
+    # SQLAlchemy coerce interval_seconds's bind param through EpochDateTime.process_bind_param.
+    epoch_seconds = cast(MetricPoint.timestamp, Float)
+    return cast(epoch_seconds / interval_seconds, Integer).label("bucket")
 
 
 def _aggregate_expr(metric_type: str) -> Any:
