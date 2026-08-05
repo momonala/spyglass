@@ -123,6 +123,16 @@ class ProjectStore:
         _, logs_engine = self._ensure_engines(slug)
         return Session(logs_engine)
 
+    def metrics_engine(self, slug: str) -> Engine:
+        """Return the SQLAlchemy Engine bound to this project's metrics.db."""
+        metrics_engine, _ = self._ensure_engines(slug)
+        return metrics_engine
+
+    def logs_engine(self, slug: str) -> Engine:
+        """Return the SQLAlchemy Engine bound to this project's logs.db."""
+        _, logs_engine = self._ensure_engines(slug)
+        return logs_engine
+
     def all_slugs(self) -> list[str]:
         """Return slugs of all initialized project directories."""
         if not self._data_dir.exists():

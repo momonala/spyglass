@@ -6,7 +6,9 @@ import time
 from datetime import timedelta
 
 import schedule
+from sqlalchemy import Engine
 from sqlalchemy import delete
+from sqlalchemy import text
 
 from spyglass.db.models import LogEntry
 from spyglass.db.models import MetricPoint
@@ -16,8 +18,14 @@ from spyglass.server.util import utcnow
 logger = logging.getLogger(__name__)
 
 
+def _vacuum(engine: Engine) -> None:
+    """Reclaim disk space freed by deletes. Must run outside a transaction."""
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.execute(text("VACUUM"))
+
+
 def run_retention(store: ProjectStore) -> None:
-    """Delete stale rows from every known project's metrics and logs DBs."""
+    """Delete stale rows from every known project's metrics and logs DBs, then vacuum."""
     for slug in store.all_slugs():
         retention_days = store.get_retention_days(slug)
         cutoff = utcnow() - timedelta(days=retention_days)
@@ -31,6 +39,11 @@ def run_retention(store: ProjectStore) -> None:
             result = session.execute(delete(LogEntry).where(LogEntry.timestamp < cutoff))
             session.commit()
             deleted_logs = result.rowcount
+
+        if deleted_metrics:
+            _vacuum(store.metrics_engine(slug))
+        if deleted_logs:
+            _vacuum(store.logs_engine(slug))
 
         if deleted_metrics or deleted_logs:
             logger.info(

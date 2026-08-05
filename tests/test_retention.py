@@ -6,6 +6,7 @@ from datetime import timezone
 
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy import text
 
 from spyglass.db.models import LogEntry
 from spyglass.db.models import MetricPoint
@@ -89,6 +90,26 @@ def test_retention_respects_per_project_retention_days(tmp_path):
 
     assert _count_metrics(store, slug_short) == 0
     assert _count_metrics(store, slug_long) == 1
+
+
+def test_retention_vacuums_after_deleting_rows(tmp_path):
+    store = ProjectStore(tmp_path / "data")
+    slug = store.init_project("my-api", retention_days=30)
+
+    for _ in range(500):
+        _insert_metric(store, slug, days_old=60)  # stale
+
+    with store.metrics_session(slug) as session:
+        freelist_before = session.execute(text("PRAGMA freelist_count")).scalar()
+
+    run_retention(store)
+
+    with store.metrics_session(slug) as session:
+        freelist_after = session.execute(text("PRAGMA freelist_count")).scalar()
+
+    assert _count_metrics(store, slug) == 0
+    assert freelist_before == 0  # nothing deleted yet, so nothing to vacuum
+    assert freelist_after == 0  # vacuum reclaimed the freed pages
 
 
 def test_retention_runs_across_multiple_projects(tmp_path):
