@@ -101,6 +101,15 @@
 
   </div>
 
+  <section class="card card-full" aria-labelledby="processMemHeading">
+    <div class="card-header">
+      <h2 id="processMemHeading">Process memory</h2>
+    </div>
+    <div class="chart-card chart-card--inset">
+      <canvas id="chartProcessMemory" aria-label="Process RSS and GC-tracked object count over time"></canvas>
+    </div>
+  </section>
+
 {% endblock %}
 
 {% block script %}
@@ -138,6 +147,9 @@ const M = {
 
   rawFileCount: `${PROJECT}.report_storage_metrics.raw_data_file_count`,
   dbSizeMb:     `${PROJECT}.report_storage_metrics.db_size_mb`,
+
+  rssMb:     `${PROJECT}.report_process_metrics.rss_mb`,
+  gcObjects: `${PROJECT}.report_process_metrics.gc_objects`,
 };
 
 initDashboard({
@@ -163,6 +175,15 @@ initDashboard({
 
       buildLineChart("chartDbSize", PROJECT, [
         { label: "DB size (MB)", metricName: M.dbSizeMb, color: COLORS.accent, fill: true },
+      ], win, signal),
+
+      // Read the two series against each other: if they climb together the process is
+      // retaining objects; if RSS climbs while the object count stays flat it is
+      // allocator fragmentation, which needs a different fix. Separate axes because
+      // the counts run several orders of magnitude above the megabytes.
+      buildLineChart("chartProcessMemory", PROJECT, [
+        { label: "RSS (MB)",   metricName: M.rssMb,     color: COLORS.accent, axisLabel: "MB" },
+        { label: "GC objects", metricName: M.gcObjects, color: COLORS.purple, axis: "y1", axisLabel: "objects" },
       ], win, signal),
 
       buildFunctionStatsTable("fnStatsTableBody", PROJECT, [
