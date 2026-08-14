@@ -1,0 +1,161 @@
+{% extends "dashboard/_base.html" %}
+
+{% block title %}find-my{% endblock %}
+
+{% block sections %}
+
+  <div class="card-full ts-top-row">
+
+    <div class="chart-card">
+      <h3 class="chart-title">Poll cycle duration (ms)</h3>
+      <canvas id="chartPollDuration" aria-label="Poll cycle duration over time"></canvas>
+    </div>
+
+    <section class="card" aria-labelledby="pollerHeading">
+      <div class="card-header">
+        <h2 id="pollerHeading">Poller</h2>
+      </div>
+      <div class="stat-grid">
+        <div class="stat">
+          <span class="stat-label">Cycles</span>
+          <span id="stat-poll-count" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Failures</span>
+          <span id="stat-poll-failures" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Success rate</span>
+          <span id="stat-poll-success-rate" class="stat-value stat-danger-or-healthy">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Consecutive failures</span>
+          <span id="stat-consecutive-failures" class="stat-value stat-danger-or-healthy">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Duration p95</span>
+          <span id="stat-poll-p95" class="stat-value">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="telegramHeading">
+      <div class="card-header">
+        <h2 id="telegramHeading">Telegram delivery</h2>
+      </div>
+      <div class="stat-grid">
+        <div class="stat">
+          <span class="stat-label">Delivered</span>
+          <span id="stat-telegram-sent" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Failed</span>
+          <span id="stat-telegram-failed" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Skipped (not configured)</span>
+          <span id="stat-telegram-skipped" class="stat-value">—</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <section class="card card-full" aria-labelledby="alertsHeading">
+    <div class="card-header">
+      <h2 id="alertsHeading">Alerts triggered</h2>
+    </div>
+    <div class="chart-card chart-card--inset">
+      <canvas id="chartAlerts" aria-label="Movement and proximity alerts over time"></canvas>
+    </div>
+  </section>
+
+{% endblock %}
+
+{% block script %}
+<script>
+// Metric naming: {project}.{caller_function}.{stat}
+// Verify names against /dashboard/api/metrics/names?project=find-my if charts are empty.
+const PROJECT = "find-my";
+const M = {
+  pollDuration:         `${PROJECT}._poll_once.duration`,
+  pollFailure:          `${PROJECT}.run_forever.failure`,
+  consecutiveFailures:  `${PROJECT}.run_forever.consecutive_failures`,
+  movementTriggered:    `${PROJECT}.check_alerts.movement_triggered`,
+  proximityEntered:     `${PROJECT}.check_alerts.proximity_entered`,
+  proximityExited:      `${PROJECT}.check_alerts.proximity_exited`,
+  telegramFailed:       `${PROJECT}._notify.telegram_failed`,
+  telegramSkipped:      `${PROJECT}.send_telegram_message.telegram_skipped`,
+};
+
+initDashboard({
+  project: PROJECT,
+  loadFn: async (win, signal) => {
+    await Promise.allSettled([
+      buildLineChart("chartPollDuration", PROJECT, [
+        { label: "duration (ms)", metricName: M.pollDuration, color: COLORS.accent },
+      ], win, signal),
+
+      buildStackedBarChart("chartAlerts", PROJECT, [
+        { label: "movement",         metricName: M.movementTriggered, color: COLORS.warn },
+        { label: "proximity entered", metricName: M.proximityEntered, color: COLORS.success },
+        { label: "proximity exited",  metricName: M.proximityExited,  color: COLORS.muted },
+      ], win, signal),
+
+      fillStats(PROJECT, [
+        { elementId: "stat-poll-count",    metricName: M.pollDuration, pick: (s) => s.count, format: "count" },
+        { elementId: "stat-poll-failures", metricName: M.pollFailure,  pick: (s) => s.sum,   format: "count",
+          danger: (s) => (s.sum ?? 0) > 0 },
+        { elementId: "stat-poll-p95",      metricName: M.pollDuration, pick: (s) => s.p95 ?? s.max, format: "ms" },
+      ], win, signal),
+
+      fillDerivedStat(PROJECT, {
+        elementId: "stat-poll-success-rate",
+        sources: [
+          { metricName: M.pollDuration },
+          { metricName: M.pollFailure },
+        ],
+        compute: ([duration, failure]) => {
+          const total = duration?.count ?? 0;
+          if (total <= 0) return null;
+          const failed = failure?.sum ?? 0;
+          return Math.max(0, (total - failed) / total) * 100;
+        },
+        format: "percent",
+        danger: (_summaries, value) => value != null && value < 95,
+      }, win, signal),
+
+      fillDerivedStat(PROJECT, {
+        elementId: "stat-consecutive-failures",
+        sources: [{ metricName: M.consecutiveFailures }],
+        compute: ([gauge]) => gauge?.max ?? null,
+        format: "count",
+        danger: (_summaries, value) => value != null && value > 0,
+      }, win, signal),
+
+      fillStats(PROJECT, [
+        { elementId: "stat-telegram-failed",  metricName: M.telegramFailed,  pick: (s) => s.sum, format: "count",
+          danger: (s) => (s.sum ?? 0) > 0 },
+        { elementId: "stat-telegram-skipped", metricName: M.telegramSkipped, pick: (s) => s.sum, format: "count" },
+      ], win, signal),
+
+      fillDerivedStat(PROJECT, {
+        elementId: "stat-telegram-sent",
+        sources: [
+          { metricName: M.movementTriggered },
+          { metricName: M.proximityEntered },
+          { metricName: M.proximityExited },
+          { metricName: M.telegramFailed },
+          { metricName: M.telegramSkipped },
+        ],
+        compute: ([movement, entered, exited, failed, skipped]) => {
+          const triggered = (movement?.sum ?? 0) + (entered?.sum ?? 0) + (exited?.sum ?? 0);
+          return Math.max(0, triggered - (failed?.sum ?? 0) - (skipped?.sum ?? 0));
+        },
+        format: "count",
+      }, win, signal),
+    ]);
+  },
+});
+</script>
+{% endblock %}
