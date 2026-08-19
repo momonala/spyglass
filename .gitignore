@@ -94,3 +94,4 @@ src/spyglass/static/dashboard/abstract-background.webm
 .local/
 .ipython/
 .cursor/
+.claude/

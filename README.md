@@ -18,116 +18,6 @@ Metrics and log collection for small Python services, with a hosted dashboard UI
 - [uv](https://github.com/astral-sh/uv)
 - Node.js (only to run the dashboard JS tests, `tests/*.mjs`)
 
-## Quick start
-
-Install dependencies and start the server:
-
-```bash
-uv sync
-uv run spyglass
-```
-
-Open `http://localhost:5013/dashboard/` — one card per registered project showing row counts, 24h error count, a 48-hour write-rate sparkline, on-disk size and retention. The sidebar lists any project that has a template under `src/spyglass/templates/dashboard/`.
-
-The index deliberately stays quiet when everything is fine: there is no per-project "healthy" indicator, because one that is green on every card carries no information. State surfaces through the fields that already exist — the error count turns red when non-zero, and the last-activity age turns amber once a project has written nothing for 24h.
-
-In another terminal, instrument an app (project name is **required**):
-
-```python
-from spyglass import initialize
-
-logger, metrics = initialize(host="localhost:5013", project="my-api")
-
-def handle_request():
-    metrics.increment("requests")   # → my-api.handle_request.requests
-    metrics.gauge("queue_depth", 3)
-    with metrics.timed("db_query"):
-        ...
-    logger.info("handled request")
-```
-
-Query stored data directly:
-
-```bash
-curl "http://localhost:5013/metrics?project=my-api&limit=10"
-curl "http://localhost:5013/logs?project=my-api&level=INFO"
-```
-
-## Local install with uv (one server, many projects)
-
-Run **one Spyglass server** on your machine. Point **each app** at it with a distinct `project` name (that becomes `data/{project-slug}/` on disk).
-
-### 1. Install the server (this repo)
-
-Clone once and install the CLI as a uv tool so `spyglass` is available globally:
-
-```bash
-git clone <your-spyglass-repo-url> ~/code/spyglass
-cd ~/code/spyglass
-uv sync
-uv tool install --editable .
-```
-
-Start the server (uses `[tool.config]` in this repo's `pyproject.toml`):
-
-```bash
-spyglass
-spyglass --port 5013
-```
-
-Leave this running. All instrumented apps send to `http://localhost:5013`.
-
-To upgrade after pulling changes:
-
-```bash
-cd ~/code/spyglass && git pull && uv sync && uv tool install --editable --force .
-```
-
-### 2. Add the SDK to each application project
-
-In every repo you want to instrument (repeat per project):
-
-```bash
-cd ~/code/my-api
-uv add --editable ~/code/spyglass
-uv sync
-```
-
-Or as a git dependency (see `[tool.uv.sources]` in any consumer repo, e.g. `energy-monitor`, `trainspotter`, `incognita`):
-
-```toml
-[project]
-dependencies = ["spyglass"]
-
-[tool.uv.sources]
-spyglass = { git = "https://github.com/momonala/spyglass.git", rev = "main" }
-```
-
-### 3. Instrument each app with a unique `project`
-
-```python
-from spyglass import initialize
-
-logger, metrics = initialize(host="localhost:5013", project="my-api")
-```
-
-| Application repo | `project=` value | Data on server |
-|------------------|------------------|----------------|
-| `~/code/my-api` | `"my-api"` | `data/my-api/` |
-| `~/code/worker` | `"worker"` | `data/worker/` |
-
-### 4. Verify
-
-```bash
-curl http://localhost:5013/status
-curl "http://localhost:5013/metrics?project=my-api&limit=5"
-```
-
-### Notes
-
-- **Server vs SDK:** `uv tool install` is only for the machine-wide `spyglass` server command. App repos add the SDK as a normal (or editable/git) dependency for imports only; they do not run the server themselves.
-- **Path dependency:** If you move the spyglass clone, re-run `uv add --editable <new-path>` in each app (or update `[tool.uv.sources]`).
-
 ## Configuration
 
 Non-secret settings live in `pyproject.toml` under `[tool.config]`, loaded by `spyglass._config.CONFIG`:
@@ -159,6 +49,79 @@ uv run spyglass-config --project-name
 uv run spyglass-config --all
 ```
 
+## Quick start
+
+Run **one Spyglass server** on your machine. Point **each app** at it with a distinct `project` name (that becomes `data/{project-slug}/` on disk).
+
+### 1. Install and start the server (this repo)
+
+Clone once and install the CLI as a uv tool so `spyglass` is available globally:
+
+```bash
+git clone <your-spyglass-repo-url> ~/code/spyglass
+cd ~/code/spyglass
+uv sync
+uv tool install --editable .
+spyglass --port 5013
+```
+
+Leave this running — all instrumented apps send to `http://localhost:5013`. To upgrade after pulling changes: `cd ~/code/spyglass && git pull && uv sync && uv tool install --editable --force .`
+
+Open `http://localhost:5013/dashboard/` — one card per registered project showing row counts, 24h error count, a 48-hour write-rate sparkline, on-disk size and retention. The index deliberately stays quiet when everything is fine: the error count turns red when non-zero and the last-activity age turns amber once a project has written nothing for 24h, so there's no separate "healthy" indicator (one that's green on every card carries no information).
+
+### 2. Add the SDK to each application project
+
+In every repo you want to instrument (repeat per project):
+
+```bash
+cd ~/code/my-api
+uv add --editable ~/code/spyglass
+uv sync
+```
+
+Or as a git dependency (see `[tool.uv.sources]` in any consumer repo, e.g. `energy-monitor`, `trainspotter`, `incognita`):
+
+```toml
+[project]
+dependencies = ["spyglass"]
+
+[tool.uv.sources]
+spyglass = { git = "https://github.com/momonala/spyglass.git", rev = "main" }
+```
+
+### 3. Instrument each app with a unique `project`
+
+```python
+from spyglass import initialize
+
+logger, metrics = initialize(host="localhost:5013", project="my-api")
+
+def handle_request():
+    metrics.increment("requests")   # → my-api.handle_request.requests
+    metrics.gauge("queue_depth", 3)
+    with metrics.timed("db_query"):
+        ...
+    logger.info("handled request")
+```
+
+| Application repo | `project=` value | Data on server |
+|------------------|------------------|----------------|
+| `~/code/my-api` | `"my-api"` | `data/my-api/` |
+| `~/code/worker` | `"worker"` | `data/worker/` |
+
+### 4. Verify
+
+```bash
+curl http://localhost:5013/status
+curl "http://localhost:5013/metrics?project=my-api&limit=5"
+curl "http://localhost:5013/logs?project=my-api&level=INFO"
+```
+
+### Notes
+
+- **Server vs SDK:** `uv tool install` is only for the machine-wide `spyglass` server command. App repos add the SDK as a normal (or editable/git) dependency for imports only; they do not run the server themselves.
+- **Path dependency:** If you move the spyglass clone, re-run `uv add --editable <new-path>` in each app (or update `[tool.uv.sources]`).
+
 ## Project structure
 
 ```
@@ -171,6 +134,7 @@ spyglass/
 │   │   ├── __init__.py          # public exports: initialize, MetricsCollector, configure_logging
 │   │   ├── cli.py               # `spyglass` server entrypoint
 │   │   ├── _config.py           # loads [tool.config]
+│   │   ├── config.py            # legacy Typer config CLI (`uv run spyglass-config`)
 │   │   ├── client/
 │   │   │   ├── collector.py     # MetricsCollector (metrics SDK)
 │   │   │   ├── logging.py       # SpyglassHandler + configure_logging
@@ -197,12 +161,13 @@ spyglass/
 │   │   │   ├── index.html       # /dashboard/ project overview cards
 │   │   │   ├── energy-monitor.html
 │   │   │   ├── trainspotter.html
-│   │   │   └── incognita.html
+│   │   │   ├── incognita.html
+│   │   │   ├── find-my.html
+│   │   │   └── claude-usage-notch-server.html
 │   │   └── static/dashboard/
 │   │       ├── css/{shared,components}.css
 │   │       ├── js/sidebar.js        # collapse toggle, state in localStorage
 │   │       └── js/dashboard-lib.js  # chart builders, stat fillers, log section, initDashboard()
-│   ├── config.py                # legacy Typer config CLI
 │   └── env.py                   # .env secrets
 ├── docs/                        # per-project dashboard change logs (e.g. trainspotter-dashboard-handoff.md)
 ├── tests/                       # pytest (Python) + tests/*.mjs (dashboard-lib.js, run with `node --test`)
@@ -304,7 +269,10 @@ Backs the hosted dashboard UI; also usable directly.
 | `/dashboard/api/metrics/summary` | GET | `latest_value`, `sum`, `min`, `avg`, `max`, and `count`/`p50`/`p95` for timings, over a window |
 | `/dashboard/api/metrics/tag-values` | GET | Distinct tag values for a metric + tag key |
 | `/dashboard/api/metrics/histogram` | GET | Equal-width histogram bins for a metric over a window |
+| `/dashboard/api/metrics/histogram-multi` | GET | Equal-width histogram bins across multiple metrics (repeated `name`) over a window |
 | `/dashboard/api/layout` | GET/PUT | Load/save a per-project widget layout (`data/{slug}/dashboard.json`) — not currently used by any shipped dashboard template, which hardcode their own sections instead |
+
+`GET /` redirects to `/dashboard/`.
 
 ## Dashboards
 
@@ -323,11 +291,11 @@ Adding a dashboard for a new project means dropping a template file — no Pytho
 
 `_base.html` provides the sidebar via `_sidebar.html` (auto-populated from every `templates/dashboard/*.html` except partials/`index`), time-window controls, and the full log section (histogram, filterable table, traceback rendering, pattern grouping) — none of that is per-project.
 
-Reference dashboards: `energy-monitor.html`, `trainspotter.html`, `incognita.html`. `docs/*-dashboard-handoff.md` record metric-naming changes behind an existing dashboard (e.g. a metric rename or removal) — not build instructions.
+Reference dashboards: `energy-monitor.html`, `trainspotter.html`, `incognita.html`, `find-my.html`, `claude-usage-notch-server.html`. `docs/*-dashboard-handoff.md` record metric-naming changes behind an existing dashboard (e.g. a metric rename or removal) — not build instructions.
 
 ### Legacy aggregation library
 
-`spyglass.client.query.SpyglassQueryClient` and `spyglass.dashboard.*` (`SummaryBuilder`, `aggregate.py` functions) are a lower-level, server-side aggregation path: fetch raw points over HTTP, aggregate in the consumer app's own Python process, render your own view. No current dashboard (`energy-monitor`, `trainspotter`, `incognita`) uses this — all three use the hosted `/dashboard/{project}` system above. Still present and tested (`tests/test_dashboard.py`) for cases where a consumer app wants to embed aggregated data in its own UI instead of using the hosted one.
+`spyglass.client.query.SpyglassQueryClient` and `spyglass.dashboard.*` (`SummaryBuilder`, `aggregate.py` functions) are a lower-level, server-side aggregation path: fetch raw points over HTTP, aggregate in the consumer app's own Python process, render your own view. No current dashboard (`energy-monitor`, `trainspotter`, `incognita`, `find-my`, `claude-usage-notch-server`) uses this — all use the hosted `/dashboard/{project}` system above. Still present and tested (`tests/test_dashboard.py`) for cases where a consumer app wants to embed aggregated data in its own UI instead of using the hosted one.
 
 ## Data model
 
