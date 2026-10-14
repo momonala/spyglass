@@ -95,3 +95,6 @@ src/spyglass/static/dashboard/abstract-background.webm
 .ipython/
 .cursor/
 .claude/
+
+# Local helper, host-specific
+sync.sh

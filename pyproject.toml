@@ -80,3 +80,6 @@ exclude_lines = [
     "if TYPE_CHECKING:",
 ]
 
+[tool.deploy]
+# Databases live one directory deep, under data/<monitored-project>/.
+db_layout = "nested"
