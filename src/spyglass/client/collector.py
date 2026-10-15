@@ -1,6 +1,7 @@
 """MetricsCollector: emits counters, gauges, timings, and sets to the Spyglass server."""
 
 import inspect
+import json
 import logging
 import time
 from collections.abc import Generator
@@ -10,6 +11,8 @@ from datetime import timezone
 
 import requests
 
+from spyglass.client.batching import DEFAULT_FLUSH_INTERVAL
+from spyglass.client.batching import Batcher
 from spyglass.client.http_client import _normalize_host
 from spyglass.client.http_client import create_session
 from spyglass.db.models import MetricType
@@ -39,6 +42,11 @@ def _caller_function() -> str:
 class MetricsCollector:
     """Emits metrics to a running Spyglass server.
 
+    Points are buffered and sent in one batch every ``flush_interval`` seconds from
+    a background thread, so emitting never blocks on the network. Counters with the
+    same name and tags are summed within a batch; gauges, timings and sets are sent
+    point by point. Call ``flush()`` to send immediately.
+
     Stat names are automatically prefixed with ``{project}.{caller_function}``.
     Pass ``prefix=False`` to any emit method to send the stat name as-is.
 
@@ -48,6 +56,7 @@ class MetricsCollector:
         retention_days: How long to retain data on the server. Sent on registration.
         tags: Optional dict of tags merged into every emitted point.
         timeout: HTTP request timeout in seconds.
+        flush_interval: Seconds between batched sends.
 
     Example::
 
@@ -67,6 +76,7 @@ class MetricsCollector:
         retention_days: int = 30,
         tags: dict | None = None,
         timeout: float = 2.0,
+        flush_interval: float = DEFAULT_FLUSH_INTERVAL,
     ) -> None:
         if not project.strip():
             raise ValueError("project is required and must be non-empty")
@@ -75,7 +85,12 @@ class MetricsCollector:
         self._tags = tags or {}
         self._timeout = timeout
         self._session = create_session()
+        self._batcher = Batcher(self._post_points, flush_interval=flush_interval)
         self._register(retention_days)
+
+    def flush(self) -> None:
+        """Send all buffered points now."""
+        self._batcher.flush()
 
     def increment(
         self, stat: str, value: float = 1, *, tags: dict | None = None, prefix: bool = True
@@ -142,22 +157,26 @@ class MetricsCollector:
         self._send_point(metric_type, name, value, tags)
 
     def _send_point(self, metric_type: MetricType, name: str, value: float, tags: dict | None) -> None:
-        merged = {**self._tags, **(tags or {})}
-        merged_tags = merged or None
-        payload = {
-            "project": self.project,
-            "points": [
-                {
-                    "name": name,
-                    "metric_type": metric_type.value,
-                    "value": value,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    **({"tags": merged_tags} if merged_tags else {}),
-                }
-            ],
+        merged_tags = {**self._tags, **(tags or {})} or None
+        point = {
+            "name": name,
+            "metric_type": metric_type.value,
+            "value": value,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            **({"tags": merged_tags} if merged_tags else {}),
         }
+        sum_key = None
+        if metric_type == MetricType.COUNTER:
+            sum_key = (name, json.dumps(merged_tags, sort_keys=True))
+        self._batcher.add(point, sum_key=sum_key)
+
+    def _post_points(self, points: list[dict]) -> None:
         try:
-            self._session.post(f"{self._host}/metrics", json=payload, timeout=self._timeout)
+            self._session.post(
+                f"{self._host}/metrics",
+                json={"project": self.project, "points": points},
+                timeout=self._timeout,
+            )
         except requests.RequestException as exc:
             _log.debug("spyglass metric emit failed: %s", exc)
 

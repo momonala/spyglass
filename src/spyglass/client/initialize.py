@@ -3,6 +3,7 @@
 import inspect
 import logging
 
+from spyglass.client.batching import DEFAULT_FLUSH_INTERVAL
 from spyglass.client.collector import SPYGLASS_PACKAGE
 from spyglass.client.collector import MetricsCollector
 from spyglass.client.logging import configure_logging
@@ -26,6 +27,7 @@ def initialize(
     tags: dict | None = None,
     timeout: float = 2.0,
     logger_name: str | None = None,
+    flush_interval: float = DEFAULT_FLUSH_INTERVAL,
 ) -> tuple[logging.Logger, MetricsCollector]:
     """Configure logging and metrics for the calling application.
 
@@ -41,6 +43,7 @@ def initialize(
         tags: Optional global metric tags.
         timeout: HTTP timeout in seconds.
         logger_name: Override the inferred caller module name for the logger.
+        flush_interval: Seconds between batched sends of metrics and logs.
 
     Returns:
         ``(logger, metrics_collector)`` ready to use in the calling module.
@@ -53,13 +56,14 @@ def initialize(
         logger.info("started")
         metrics.increment("requests")
     """
-    configure_logging(host=host, project=project, level=level, timeout=timeout)
+    configure_logging(host=host, project=project, level=level, timeout=timeout, flush_interval=flush_interval)
     collector = MetricsCollector(
         host=host,
         project=project,
         retention_days=retention_days,
         tags=tags,
         timeout=timeout,
+        flush_interval=flush_interval,
     )
     logger = logging.getLogger(logger_name or _caller_logger_name())
     return logger, collector
