@@ -18,10 +18,16 @@ from spyglass.server.util import utcnow
 logger = logging.getLogger(__name__)
 
 
-def _vacuum(engine: Engine) -> None:
-    """Reclaim disk space freed by deletes. Must run outside a transaction."""
+VACUUM_FREE_PAGE_RATIO = 0.25
+
+
+def _vacuum_if_fragmented(engine: Engine) -> None:
+    """Reclaim disk space once free pages are a large share of the file."""
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        conn.execute(text("VACUUM"))
+        page_count = conn.execute(text("PRAGMA page_count")).scalar() or 0
+        free_pages = conn.execute(text("PRAGMA freelist_count")).scalar() or 0
+        if page_count and free_pages / page_count >= VACUUM_FREE_PAGE_RATIO:
+            conn.execute(text("VACUUM"))
 
 
 def run_retention(store: ProjectStore) -> None:
@@ -51,9 +57,9 @@ def _run_retention_for_project(store: ProjectStore, slug: str) -> None:
         deleted_logs = result.rowcount
 
     if deleted_metrics:
-        _vacuum(store.metrics_engine(slug))
+        _vacuum_if_fragmented(store.metrics_engine(slug))
     if deleted_logs:
-        _vacuum(store.logs_engine(slug))
+        _vacuum_if_fragmented(store.logs_engine(slug))
 
     if deleted_metrics or deleted_logs:
         logger.info(

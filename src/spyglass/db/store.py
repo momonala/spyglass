@@ -14,6 +14,7 @@ from pathlib import Path
 
 from sqlalchemy import Engine
 from sqlalchemy import create_engine
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from alembic.command import upgrade as alembic_upgrade
@@ -28,6 +29,19 @@ def _run_migrations(db_path: Path, branch: str) -> None:
     cfg = AlembicConfig(str(_ALEMBIC_INI))
     cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
     alembic_upgrade(cfg, f"{branch}@head")
+
+
+def _create_sqlite_engine(db_path: Path) -> Engine:
+    engine = create_engine(f"sqlite:///{db_path}")
+
+    @event.listens_for(engine, "connect")
+    def _set_pragmas(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
+
+    return engine
 
 
 def slugify(name: str) -> str:
@@ -154,8 +168,8 @@ class ProjectStore:
             _run_migrations(metrics_db, "metrics")
             _run_migrations(logs_db, "logs")
 
-            metrics_engine = create_engine(f"sqlite:///{metrics_db}")
-            logs_engine = create_engine(f"sqlite:///{logs_db}")
+            metrics_engine = _create_sqlite_engine(metrics_db)
+            logs_engine = _create_sqlite_engine(logs_db)
 
             self._engines[slug] = (metrics_engine, logs_engine)
 

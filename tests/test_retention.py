@@ -114,6 +114,34 @@ def test_retention_vacuums_after_deleting_rows(tmp_path):
     assert freelist_after == 0  # vacuum reclaimed the freed pages
 
 
+def test_retention_skips_vacuum_when_few_pages_are_freed(tmp_path):
+    store = ProjectStore(tmp_path / "data")
+    slug = store.init_project("my-api", retention_days=30)
+
+    for _ in range(300):
+        _insert_metric(store, slug, days_old=60)
+    for _ in range(2000):
+        _insert_metric(store, slug, days_old=1)
+
+    run_retention(store)
+
+    with store.metrics_session(slug) as session:
+        freelist_after = session.execute(text("PRAGMA freelist_count")).scalar()
+
+    assert _count_metrics(store, slug) == 2000
+    assert freelist_after > 0  # freed pages stay on the freelist for reuse instead of a full rewrite
+
+
+def test_project_databases_use_wal(tmp_path):
+    store = ProjectStore(tmp_path / "data")
+    slug = store.init_project("my-api")
+
+    with store.metrics_session(slug) as session:
+        assert session.execute(text("PRAGMA journal_mode")).scalar() == "wal"
+    with store.logs_session(slug) as session:
+        assert session.execute(text("PRAGMA journal_mode")).scalar() == "wal"
+
+
 def test_retention_runs_across_multiple_projects(tmp_path):
     store = ProjectStore(tmp_path / "data")
     slug_a = store.init_project("alpha", retention_days=30)
