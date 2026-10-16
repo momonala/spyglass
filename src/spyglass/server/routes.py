@@ -10,7 +10,6 @@ from flask import jsonify
 from flask import request
 from sqlalchemy import select
 
-from spyglass.db.metric_names import get_or_create_name_id
 from spyglass.db.metric_names import name_to_id_map
 from spyglass.db.models import LogEntry
 from spyglass.db.models import MetricPoint
@@ -18,6 +17,8 @@ from spyglass.db.models import MetricType
 from spyglass.db.store import DEFAULT_RETENTION_DAYS
 from spyglass.db.store import ProjectStore
 from spyglass.server.util import parse_timestamp
+from spyglass.server.write_buffer import PendingMetric
+from spyglass.server.write_buffer import WriteBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,10 @@ DEFAULT_QUERY_LIMIT = 1000
 
 def _store() -> ProjectStore:
     return current_app.config["STORE"]
+
+
+def _write_buffer() -> WriteBuffer:
+    return current_app.config["WRITE_BUFFER"]
 
 
 def _unwrap_batch(data: dict, key: str) -> list:
@@ -79,23 +84,18 @@ def ingest_metrics() -> tuple[Response, int]:
             return err, 400
         parsed.append((p, metric_type))
 
-    store = _store()
-    slug = store.get_slug(project)
-    with store.metrics_session(slug) as session:
-        rows = []
-        for p, metric_type in parsed:
-            tags = p.get("tags")
-            rows.append(
-                MetricPoint(
-                    timestamp=parse_timestamp(p.get("timestamp")),
-                    name_id=get_or_create_name_id(session, p["name"]),
-                    metric_type=metric_type.value,
-                    value=float(p.get("value", 0)),
-                    tags=json.dumps(tags) if tags is not None else None,
-                )
-            )
-        session.add_all(rows)
-        session.commit()
+    slug = _store().get_slug(project)
+    rows = [
+        PendingMetric(
+            name=p["name"],
+            timestamp=parse_timestamp(p.get("timestamp")),
+            metric_type=metric_type.value,
+            value=float(p.get("value", 0)),
+            tags=json.dumps(p["tags"]) if p.get("tags") is not None else None,
+        )
+        for p, metric_type in parsed
+    ]
+    _write_buffer().add_metrics(slug, rows)
 
     return jsonify({"inserted": len(rows)}), 201
 
@@ -125,11 +125,8 @@ def ingest_logs() -> tuple[Response, int]:
             )
         )
 
-    store = _store()
-    slug = store.get_slug(project)
-    with store.logs_session(slug) as session:
-        session.add_all(rows)
-        session.commit()
+    slug = _store().get_slug(project)
+    _write_buffer().add_logs(slug, rows)
 
     return jsonify({"inserted": len(rows)}), 201
 

@@ -1,6 +1,8 @@
 """CLI entry point. Run `spyglass` to start the ingest and read server."""
 
 import logging
+import signal
+import sys
 from pathlib import Path
 
 import typer
@@ -21,6 +23,7 @@ def serve(
     from spyglass.db.store import ProjectStore
     from spyglass.server.app import create_app
     from spyglass.server.retention import start_retention_thread
+    from spyglass.server.write_buffer import WriteBuffer
 
     _host = host or CONFIG.host
     _port = port or CONFIG.port
@@ -29,9 +32,16 @@ def serve(
     store = ProjectStore(_data_dir)
     start_retention_thread(store)
 
-    flask_app = create_app(store)
+    write_buffer = WriteBuffer(store, CONFIG.write_flush_interval_s)
+    write_buffer.start()
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+
+    flask_app = create_app(store, write_buffer)
     typer.echo(f"Spyglass listening on http://{_host}:{_port}")
-    flask_app.run(host=_host, port=_port, debug=False)
+    try:
+        flask_app.run(host=_host, port=_port, debug=False)
+    finally:
+        write_buffer.stop()
 
 
 def main() -> None:
