@@ -71,8 +71,11 @@ def _run_retention_for_project(store: ProjectStore, slug: str) -> None:
         )
 
 
+RETENTION_TIME = "04:00"
+
+
 def start_retention_thread(store: ProjectStore) -> threading.Thread:
-    """Start a daemon thread that runs retention at startup and then every hour.
+    """Start a daemon thread that runs retention at startup and then daily at RETENTION_TIME.
 
     Uses a per-instance ``schedule.Scheduler`` to avoid polluting the global
     scheduler (important when multiple stores are created in tests).
@@ -84,7 +87,7 @@ def start_retention_thread(store: ProjectStore) -> threading.Thread:
         The started daemon thread.
     """
     scheduler = schedule.Scheduler()
-    scheduler.every(1).hours.do(run_retention, store)
+    scheduler.every().day.at(RETENTION_TIME).do(run_retention, store)
 
     def loop() -> None:
         run_retention(store)  # run once immediately at startup

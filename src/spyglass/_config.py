@@ -14,7 +14,7 @@ class SpyglassConfig:
     host: str = "0.0.0.0"
     port: int = 5013
     retention_days: int = 30
-    write_flush_interval_s: float = 120
+    write_flush_interval_s: float = 600
     project_name: str = ""
     project_version: str = ""
 

@@ -30,7 +30,7 @@ data_dir = "data"
 host = "0.0.0.0"
 port = 5013
 retention_days = 30
-write_flush_interval_s = 120
+write_flush_interval_s = 600
 
 [build-system]
 requires = ["hatchling"]

@@ -212,7 +212,7 @@ flowchart LR
     RET --> L
 ```
 
-**Boundaries:** `spyglass.client` never touches SQLAlchemy. `spyglass.server.routes` (ingest/query API) and `spyglass.server.site` (dashboard UI + JSON API) both route by `project` through `db.store.ProjectStore`, which lazily creates and migrates each project's `metrics.db`/`logs.db` on first access. Retention runs in a daemon thread using `schedule` (hourly, plus once at startup).
+**Boundaries:** `spyglass.client` never touches SQLAlchemy. `spyglass.server.routes` (ingest/query API) and `spyglass.server.site` (dashboard UI + JSON API) both route by `project` through `db.store.ProjectStore`, which lazily creates and migrates each project's `metrics.db`/`logs.db` on first access. Retention runs in a daemon thread using `schedule` (daily at `RETENTION_TIME` in `retention.py`, plus once at startup).
 
 **Stat naming:** With default `prefix=True`, `increment("requests")` inside `handle_request` becomes `{project}.handle_request.requests`. Use `prefix=False` to send a full stat name unchanged (used e.g. by decorators that would otherwise report their own wrapper function's name as the caller).
 
@@ -305,7 +305,7 @@ Both tables use an autoincrement `id` surrogate primary key, with `timestamp` (U
 
 **`log_entries`** (`logs.db`): `id`, `timestamp`, `level`, `logger_name`, `message`, `extra` (JSON text).
 
-Retention deletes rows older than each project's `retention_days` (from `data/{slug}/settings.json`), scanning all project directories every hour.
+Retention deletes rows older than each project's `retention_days` (from `data/{slug}/settings.json`), scanning all project directories once a day (`RETENTION_TIME` in `retention.py`) and once at startup.
 
 ## Development
 
