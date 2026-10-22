@@ -1,8 +1,8 @@
 """Dashboard site blueprint: static UI and dashboard-specific JSON API."""
 
 import re
+from datetime import UTC
 from datetime import datetime
-from datetime import timezone
 from pathlib import Path
 
 from flask import Blueprint
@@ -42,7 +42,7 @@ def _timeago(when: datetime | None) -> str:
     """Render a naive-UTC timestamp as a short relative age, e.g. "4h ago"."""
     if when is None:
         return "no data"
-    seconds = (datetime.now(timezone.utc).replace(tzinfo=None) - when).total_seconds()
+    seconds = (datetime.now(UTC).replace(tzinfo=None) - when).total_seconds()
     for unit_seconds, suffix in ((86400, "d"), (3600, "h"), (60, "m")):
         if seconds >= unit_seconds:
             return f"{int(seconds // unit_seconds)}{suffix} ago"

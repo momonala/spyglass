@@ -5,8 +5,8 @@ configure_logging() wires up the root logger to emit records to both stdout
 """
 
 import logging
+from datetime import UTC
 from datetime import datetime
-from datetime import timezone
 
 import requests
 
@@ -47,12 +47,12 @@ class SpyglassHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             entry = {
-                "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+                "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
                 "level": record.levelname,
                 "logger_name": record.name,
                 "message": self.format(record),
             }
-        except Exception:  # noqa: BLE001 - a bad record must not break the app's logging
+        except Exception:
             return
         self._batcher.add(entry)
 

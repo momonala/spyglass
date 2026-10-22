@@ -1,10 +1,11 @@
 """Tests for spyglass.dashboard aggregate functions, SummaryBuilder, and SpyglassQueryClient."""
 
+from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
 
 import pytest
+import requests
 
 from spyglass.client.query import SpyglassQueryClient
 from spyglass.dashboard.aggregate import DEFAULT_ROLLUP
@@ -41,7 +42,7 @@ def _point(
     return {"timestamp": ts, "name": name, "metric_type": metric_type, "value": value, "tags": tags}
 
 
-NOW = datetime(2026, 5, 27, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 5, 27, 12, 0, tzinfo=UTC)
 WINDOW_START = NOW - timedelta(hours=1)
 
 # Two synthetic app profiles so no Trainspotter-specific assumptions leak in.
@@ -278,11 +279,11 @@ def test_ratio_series_basic():
 
 
 def test_compute_state_uptime_basic():
-    window_start = datetime(2026, 5, 27, 11, 0, tzinfo=timezone.utc)
-    window_end = datetime(2026, 5, 27, 12, 0, tzinfo=timezone.utc)
+    window_start = datetime(2026, 5, 27, 11, 0, tzinfo=UTC)
+    window_end = datetime(2026, 5, 27, 12, 0, tzinfo=UTC)
     events = [
-        (datetime(2026, 5, 27, 11, 10, tzinfo=timezone.utc), "healthy"),
-        (datetime(2026, 5, 27, 11, 40, tzinfo=timezone.utc), "degraded"),
+        (datetime(2026, 5, 27, 11, 10, tzinfo=UTC), "healthy"),
+        (datetime(2026, 5, 27, 11, 40, tzinfo=UTC), "degraded"),
     ]
     result = compute_state_uptime(events, window_start, window_end, ["healthy", "degraded", "unknown"])
 
@@ -296,8 +297,8 @@ def test_compute_state_uptime_basic():
 
 
 def test_compute_state_uptime_empty_events():
-    window_start = datetime(2026, 5, 27, 11, 0, tzinfo=timezone.utc)
-    window_end = datetime(2026, 5, 27, 12, 0, tzinfo=timezone.utc)
+    window_start = datetime(2026, 5, 27, 11, 0, tzinfo=UTC)
+    window_end = datetime(2026, 5, 27, 12, 0, tzinfo=UTC)
     result = compute_state_uptime([], window_start, window_end, ["healthy", "unknown"])
 
     assert result.current == "unknown"
@@ -307,11 +308,11 @@ def test_compute_state_uptime_empty_events():
 
 
 def test_compute_state_uptime_pcts_sum_to_100():
-    window_start = datetime(2026, 5, 27, 11, 0, tzinfo=timezone.utc)
-    window_end = datetime(2026, 5, 27, 12, 0, tzinfo=timezone.utc)
+    window_start = datetime(2026, 5, 27, 11, 0, tzinfo=UTC)
+    window_end = datetime(2026, 5, 27, 12, 0, tzinfo=UTC)
     events = [
-        (datetime(2026, 5, 27, 11, 15, tzinfo=timezone.utc), "a"),
-        (datetime(2026, 5, 27, 11, 45, tzinfo=timezone.utc), "b"),
+        (datetime(2026, 5, 27, 11, 15, tzinfo=UTC), "a"),
+        (datetime(2026, 5, 27, 11, 45, tzinfo=UTC), "b"),
     ]
     result = compute_state_uptime(events, window_start, window_end, ["a", "b", "unknown"])
     assert sum(result.pcts.values()) == pytest.approx(100.0)
@@ -449,8 +450,8 @@ def test_query_client_status_returns_none_on_error():
 
 def test_query_client_fetch_metrics_raises_on_http_error():
     client = SpyglassQueryClient(host="localhost:9999", project="test", timeout=0.01)
-    with pytest.raises(Exception):
-        client.fetch_metrics(since=datetime.now(timezone.utc))
+    with pytest.raises(requests.RequestException):
+        client.fetch_metrics(since=datetime.now(UTC))
 
 
 # ---------------------------------------------------------------------------

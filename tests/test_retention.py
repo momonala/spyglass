@@ -1,8 +1,8 @@
 """Tests for the retention job: stale rows are deleted, fresh rows are kept."""
 
+from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
 
 from sqlalchemy import func
 from sqlalchemy import select
@@ -16,7 +16,7 @@ from spyglass.server.retention import run_retention
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _insert_metric(store: ProjectStore, slug: str, days_old: int) -> None:

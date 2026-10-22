@@ -12,13 +12,12 @@ import json
 import re
 from pathlib import Path
 
+from alembic.command import upgrade as alembic_upgrade
+from alembic.config import Config as AlembicConfig
 from sqlalchemy import Engine
 from sqlalchemy import create_engine
 from sqlalchemy import event
 from sqlalchemy.orm import Session
-
-from alembic.command import upgrade as alembic_upgrade
-from alembic.config import Config as AlembicConfig
 
 _ALEMBIC_INI = Path(__file__).parent.parent.parent.parent / "alembic.ini"
 

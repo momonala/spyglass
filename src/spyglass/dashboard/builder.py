@@ -1,7 +1,7 @@
 """SummaryBuilder: turn raw Spyglass points + a config into a typed SummaryResponse."""
 
+from datetime import UTC
 from datetime import datetime
-from datetime import timezone
 
 from .aggregate import DEFAULT_ROLLUP
 from .aggregate import DEFAULT_WINDOW_AMOUNT
@@ -63,7 +63,7 @@ class SummaryBuilder:
         rollup: str = DEFAULT_ROLLUP,
         now: datetime | None = None,
     ) -> SummaryResponse:
-        now = now or datetime.now(timezone.utc)
+        now = now or datetime.now(UTC)
         amount = parse_window_amount(window_amount)
         unit = parse_window_unit(window_unit)
         rollup_val = parse_rollup(rollup)

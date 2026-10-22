@@ -1,13 +1,13 @@
 """Shared server utilities."""
 
+from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
 
 
 def utcnow() -> datetime:
     """Return the current UTC time as a naive datetime (SQLite-compatible)."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def parse_timestamp(ts: str | None) -> datetime:
@@ -22,7 +22,7 @@ def parse_timestamp(ts: str | None) -> datetime:
     if ts is None:
         return utcnow()
     dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.astimezone(UTC).replace(tzinfo=None)
 
 
 def parse_time_range(from_arg: str | None, to_arg: str | None) -> tuple[datetime, datetime]:

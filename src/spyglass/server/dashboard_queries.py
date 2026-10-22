@@ -1,9 +1,9 @@
 """Dashboard query helpers: metric aggregation and layout persistence."""
 
 import json
+from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
 from pathlib import Path
 from typing import Any
 
@@ -118,7 +118,7 @@ def _hourly_counts(session: Any, model: Any, since: datetime, hours: int) -> lis
     rows = session.execute(
         select(hour_col, func.count()).where(model.timestamp >= since).group_by(hour_col)
     ).all()
-    first_hour = int(since.replace(tzinfo=timezone.utc).timestamp() // 3600)
+    first_hour = int(since.replace(tzinfo=UTC).timestamp() // 3600)
     counts = [0] * hours
     for hour, count in rows:
         index = int(hour) - first_hour
@@ -134,7 +134,7 @@ def project_health(store: ProjectStore, slug: str) -> dict:
     "stale" if nothing has been written in that window, else "healthy".
     """
     db_size_bytes = sum(f.stat().st_size for f in store.project_dir(slug).glob("*.db"))
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     activity_since = now - timedelta(hours=ACTIVITY_HOURS - 1)
 
     try:
@@ -165,9 +165,7 @@ def project_health(store: ProjectStore, slug: str) -> dict:
         metric_activity = [0] * ACTIVITY_HOURS
 
     last_activity = max(filter(None, (last_log_at, last_metric_at)), default=None)
-    if not (logs_ok and metrics_ok):
-        status = "error"
-    elif error_count_24h:
+    if not (logs_ok and metrics_ok) or error_count_24h:
         status = "error"
     elif last_activity is None or now - last_activity > _STALE_AFTER:
         status = "stale"
@@ -182,7 +180,7 @@ def project_health(store: ProjectStore, slug: str) -> dict:
         "metric_count": metric_count,
         "error_count_24h": error_count_24h,
         "last_activity": last_activity,
-        "activity": [logs + metrics for logs, metrics in zip(log_activity, metric_activity)],
+        "activity": [logs + metrics for logs, metrics in zip(log_activity, metric_activity, strict=True)],
         "retention_days": store.get_retention_days(slug),
         "status": status,
     }
@@ -252,7 +250,7 @@ def query_metric_series(
 
     points = [
         {
-            "timestamp": datetime.fromtimestamp(int(row.bucket) * interval_seconds, tz=timezone.utc)
+            "timestamp": datetime.fromtimestamp(int(row.bucket) * interval_seconds, tz=UTC)
             .replace(tzinfo=None)
             .isoformat()
             + "Z",

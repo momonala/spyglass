@@ -6,8 +6,8 @@ import logging
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
+from datetime import UTC
 from datetime import datetime
-from datetime import timezone
 
 import requests
 
@@ -162,7 +162,7 @@ class MetricsCollector:
             "name": name,
             "metric_type": metric_type.value,
             "value": value,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             **({"tags": merged_tags} if merged_tags else {}),
         }
         sum_key = None

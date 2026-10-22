@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 from datetime import datetime
-from datetime import timezone
 
 import requests
 
@@ -18,8 +18,8 @@ _DEFAULT_TIMEOUT = 5.0
 
 def _iso(dt: datetime) -> str:
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class SpyglassQueryClient:

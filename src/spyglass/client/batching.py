@@ -1,6 +1,7 @@
 """In-memory buffer that ships client data to the server in periodic batches."""
 
 import atexit
+import contextlib
 import os
 import threading
 import time
@@ -79,7 +80,5 @@ class Batcher:
     def _run(self) -> None:
         while True:
             time.sleep(self._flush_interval)
-            try:
+            with contextlib.suppress(Exception):
                 self.flush()
-            except Exception:  # noqa: BLE001 - the flush thread must never die
-                pass

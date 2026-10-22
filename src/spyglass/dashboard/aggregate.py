@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import math
 import re
+from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
 
 from spyglass.dashboard.schemas import LogHistogram
 from spyglass.dashboard.schemas import PreparedLogEntry
@@ -135,7 +135,7 @@ def resolve_rollup_minutes(rollup: str, window_hours: int) -> int:
 
 def parse_metric_time(timestamp: str) -> datetime:
     dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.astimezone(UTC).replace(tzinfo=None)
 
 
 def match_points(
@@ -253,7 +253,7 @@ def ratio_series(
     numerators: list[float],
     totals: list[float],
 ) -> list[float | None]:
-    return [(n / t * 100) if t > 0 else None for n, t in zip(numerators, totals)]
+    return [(n / t * 100) if t > 0 else None for n, t in zip(numerators, totals, strict=True)]
 
 
 # ── Uptime computation ────────────────────────────────────────────────────────
