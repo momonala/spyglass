@@ -311,8 +311,8 @@ Retention deletes rows older than each project's `retention_days` (from `data/{s
 
 ```bash
 uv sync
-uv run pytest                              # Python tests + coverage (see pyproject.toml addopts)
-uv run black . --check                     # formatting
-uv run ruff check .                        # linting
+uv run --with pytest --with pytest-cov pytest                              # Python tests + coverage (see pyproject.toml addopts)
+uvx black . --check                     # formatting
+uvx ruff check .                        # linting
 node --test tests/*.mjs                    # dashboard-lib.js tests (not currently wired into CI)
 ```
