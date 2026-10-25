@@ -1,6 +1,6 @@
 {% extends "dashboard/_base.html" %}
 
-{% block title %}find-my{% endblock %}
+{% block title %}my-cloud{% endblock %}
 
 {% block sections %}
 
@@ -74,16 +74,14 @@
 
 {% block script %}
 <script>
-// Metric naming: {project}.{caller_function}.{stat}
-// Verify names against /dashboard/api/metrics/names?project=find-my if charts are empty.
-const PROJECT = "find-my";
+const PROJECT = "my-cloud";
 const M = {
   pollDuration:         `${PROJECT}._poll_once.duration`,
   pollFailure:          `${PROJECT}.run_forever.failure`,
   consecutiveFailures:  `${PROJECT}.run_forever.consecutive_failures`,
-  movementTriggered:    `${PROJECT}.check_alerts.movement_triggered`,
-  proximityEntered:     `${PROJECT}.check_alerts.proximity_entered`,
-  proximityExited:      `${PROJECT}.check_alerts.proximity_exited`,
+  movementTriggered:    `${PROJECT}._check_movement.movement_triggered`,
+  proximityEntered:     `${PROJECT}._check_radius_crossing.enter_triggered`,
+  proximityExited:      `${PROJECT}._check_radius_crossing.exit_triggered`,
   telegramFailed:       `${PROJECT}._notify.telegram_failed`,
   telegramSkipped:      `${PROJECT}.send_telegram_message.telegram_skipped`,
 };

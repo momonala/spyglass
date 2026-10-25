@@ -7,8 +7,8 @@
   <div class="card-full stat-row">
 
     <div class="chart-card col-1">
-      <h3 class="chart-title">Poll &amp; analytics duration</h3>
-      <canvas id="chartDuration" aria-label="Quota poll and analytics query duration over time"></canvas>
+      <h3 class="chart-title">Analytics query duration</h3>
+      <canvas id="chartDuration" aria-label="Analytics query duration over time"></canvas>
     </div>
 
     <div class="chart-card col-1">
@@ -16,47 +16,25 @@
       <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
     </div>
 
-    <div class="stack-col stack-col--fit col-1">
-      <section class="card" aria-labelledby="pollHeading">
-        <div class="card-header">
-          <h2 id="pollHeading">Quota Poll</h2>
+    <section class="card col-1" aria-labelledby="ingestHeading">
+      <div class="card-header">
+        <h2 id="ingestHeading">Ingest &amp; Backfill</h2>
+      </div>
+      <div class="stat-grid stat-grid--two-col">
+        <div class="stat">
+          <span class="stat-label">Records inserted</span>
+          <span id="stat-records-inserted" class="stat-value">—</span>
         </div>
-        <div class="stat-grid stat-grid--two-col">
-          <div class="stat">
-            <span class="stat-label">Success rate</span>
-            <span id="stat-poll-success-rate" class="stat-value stat-danger-or-healthy">—</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Polls succeeded</span>
-            <span id="stat-poll-success" class="stat-value">—</span>
-          </div>
+        <div class="stat">
+          <span class="stat-label">Snapshots inserted</span>
+          <span id="stat-snapshots-inserted" class="stat-value">—</span>
         </div>
-      </section>
-
-      <section class="card" aria-labelledby="ingestHeading">
-        <div class="card-header">
-          <h2 id="ingestHeading">Ingest &amp; Maintenance</h2>
+        <div class="stat stat--wide">
+          <span class="stat-label">Backfilled records</span>
+          <span id="stat-backfill-inserted" class="stat-value">—</span>
         </div>
-        <div class="stat-grid stat-grid--two-col">
-          <div class="stat">
-            <span class="stat-label">Records inserted</span>
-            <span id="stat-records-inserted" class="stat-value">—</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Snapshots inserted</span>
-            <span id="stat-snapshots-inserted" class="stat-value">—</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Daily ping success rate</span>
-            <span id="stat-ping-success-rate" class="stat-value stat-danger-or-healthy">—</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Backfill success rate</span>
-            <span id="stat-backfill-success-rate" class="stat-value stat-danger-or-healthy">—</span>
-          </div>
-        </div>
-      </section>
-    </div>
+      </div>
+    </section>
 
   </div>
 
@@ -66,20 +44,10 @@
 <script>
 const PROJECT = "claude-usage-notch-server";
 const M = {
-  pollDuration:      `${PROJECT}.poll_quota.duration`,
   analyticsDuration: `${PROJECT}.get_analytics.duration`,
-
-  pollSuccess:  `${PROJECT}.poll_quota.success`,
-  claudeError:  `${PROJECT}.poll_quota.claude_error`,
-  noQuotaLines: `${PROJECT}.poll_quota.no_quota_lines_matched`,
-
   recordsInserted:   `${PROJECT}.post_records.records_inserted`,
   snapshotsInserted: `${PROJECT}.post_quota_snapshots.quota_snapshots_inserted`,
-
-  pingSuccess:     `${PROJECT}.daily_ping.ping_success`,
-  pingFailure:     `${PROJECT}.daily_ping.ping_failure`,
-  backfillSuccess: `${PROJECT}.daily_ping.backfill_success`,
-  backfillFailure: `${PROJECT}.daily_ping.backfill_failure`,
+  backfillInserted:  `${PROJECT}.backfill.records_inserted`,
 };
 
 initDashboard({
@@ -90,49 +58,20 @@ initDashboard({
   loadFn: async (win, signal) => {
     await Promise.allSettled([
       buildLineChart("chartDuration", PROJECT, [
-        { label: "poll (ms)",      metricName: M.pollDuration,      color: COLORS.accent },
-        { label: "analytics (ms)", metricName: M.analyticsDuration, color: COLORS.success },
+        { label: "analytics (ms)", metricName: M.analyticsDuration, color: COLORS.accent },
       ], win, signal),
 
       buildLineChart("chartDbWrites", PROJECT, [
-        { label: "Records written",   metricName: M.recordsInserted,   color: COLORS.accent,  fill: true },
-        { label: "Snapshots written", metricName: M.snapshotsInserted, color: COLORS.success, fill: true },
-      ], win, signal),
-
-      fillDerivedStat(PROJECT, {
-        elementId: "stat-poll-success-rate",
-        sources: [{ metricName: M.pollSuccess }, { metricName: M.claudeError }, { metricName: M.noQuotaLines }],
-        compute: ([success, claudeErr, noLines]) => {
-          const ok = success?.sum ?? 0;
-          const total = ok + (claudeErr?.sum ?? 0) + (noLines?.sum ?? 0);
-          return total > 0 ? (ok / total) * 100 : null;
-        },
-        format: "percent",
-        danger: (_summaries, value) => value != null && value < 100,
-      }, win, signal),
-
-      fillStats(PROJECT, [
-        { elementId: "stat-poll-success", metricName: M.pollSuccess, pick: (s) => s.sum, format: "count" },
+        { label: "Records written",    metricName: M.recordsInserted,   color: COLORS.accent,  fill: true },
+        { label: "Snapshots written",  metricName: M.snapshotsInserted, color: COLORS.success, fill: true },
+        { label: "Backfilled records", metricName: M.backfillInserted,  color: COLORS.purple,  fill: true },
       ], win, signal),
 
       fillStats(PROJECT, [
         { elementId: "stat-records-inserted",   metricName: M.recordsInserted,   pick: (s) => s.sum, format: "count" },
         { elementId: "stat-snapshots-inserted", metricName: M.snapshotsInserted, pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-backfill-inserted",  metricName: M.backfillInserted,  pick: (s) => s.sum, format: "count" },
       ], win, signal),
-
-      fillSuccessRateStat(PROJECT, {
-        elementId: "stat-ping-success-rate",
-        successMetric: M.pingSuccess,
-        errorMetric: M.pingFailure,
-        dangerBelowPct: 100,
-      }, win, signal),
-
-      fillSuccessRateStat(PROJECT, {
-        elementId: "stat-backfill-success-rate",
-        successMetric: M.backfillSuccess,
-        errorMetric: M.backfillFailure,
-        dangerBelowPct: 100,
-      }, win, signal),
     ]);
   },
 });

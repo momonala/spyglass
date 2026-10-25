@@ -748,42 +748,6 @@ h1 {
   min-height: var(--chart-height);
 }
 
-/* Stacks cards vertically within one .stat-row column; the cards split the
-   column's height evenly so the stack's combined height always matches its
-   single-card (or other stack's) neighbors in the row. Supports both a
-   .card-wrapped chart (.chart-card--inset) and a standalone .chart-card. */
-.stack-col {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.stack-col > .card {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.stack-col > .card .chart-card--inset {
-  flex: 1;
-  height: auto;
-  min-height: 0;
-}
-
-.stack-col > .chart-card {
-  flex: 1;
-  height: auto;
-  min-height: 0;
-}
-
-/* Lets each stacked card size to its own content instead of splitting the
-   stack's height evenly — use when the stacked cards hold unequal amounts of
-   content (e.g. a 1-row stat card next to a 2-row stat card). */
-.stack-col--fit > .card {
-  flex: none;
-}
-
 /* Fixed two columns; a .stat--wide child spans the full row (e.g. Min|Max, then Avg).
    Self-contained (display/grid-column set explicitly) so it also works nested
    inside a parent .stat-grid. */
@@ -863,11 +827,10 @@ h1 {
 }
 
 .sidebar-link {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 6px 10px 6px 14px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
   color: var(--label-secondary);
   text-decoration: none;
@@ -877,19 +840,6 @@ h1 {
   white-space: nowrap;
   overflow: hidden;
   transition: background 0.12s, color 0.12s;
-}
-
-.sidebar-link::before {
-  content: "";
-  position: absolute;
-  left: 3px;
-  top: 50%;
-  width: 3px;
-  height: 0;
-  border-radius: 2px;
-  background: var(--accent);
-  transform: translateY(-50%);
-  transition: height 0.15s ease;
 }
 
 .sidebar-link-mark {
@@ -917,8 +867,6 @@ h1 {
   background: var(--fill);
   color: var(--label);
 }
-
-.sidebar-link.is-active::before { height: 14px; }
 
 /* ── Sidebar collapse ──────────────────────────────────── */
 
@@ -969,8 +917,6 @@ body.sidebar-collapsed .sidebar-link {
   height: 26px;
   justify-content: center;
 }
-
-body.sidebar-collapsed .sidebar-link::before { left: -3px; }
 
 body.sidebar-collapsed .sidebar-link-text { display: none; }
 
