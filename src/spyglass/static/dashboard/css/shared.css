@@ -74,9 +74,7 @@
                "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
 
   /* Radii */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
+  --radius: 3px;
 }
 
 /* ── Reset ─────────────────────────────────────────────── */

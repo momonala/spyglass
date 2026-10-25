@@ -15,7 +15,8 @@
 /* ── Page shell ────────────────────────────────────────── */
 
 :root {
-  --page-gutter: clamp(1rem, 2.5vw, 2.5rem);
+  --page-gutter: clamp(0.75rem, 1.5vw, 1.5rem);
+  --card-gap: 10px;
 }
 
 body {
@@ -81,7 +82,7 @@ h1 {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 0.5px solid var(--glass-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   color: var(--label);
   font-size: 13px;
   outline: none;
@@ -107,7 +108,7 @@ h1 {
   justify-content: center;
   padding: 5px 14px;
   border: 0.5px solid var(--glass-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -134,12 +135,12 @@ h1 {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 0.5px solid var(--glass-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
 }
 
 .view-toggle .btn {
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -162,8 +163,8 @@ h1 {
 .dashboard {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 16px var(--page-gutter) 32px;
+  gap: var(--card-gap);
+  padding: 12px var(--page-gutter) 24px;
 }
 
 .card-full { grid-column: 1 / -1; }
@@ -175,9 +176,9 @@ h1 {
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 0.5px solid var(--glass-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   box-shadow: var(--glass-specular), 0 4px 24px rgba(0, 0, 0, 0.3);
-  padding: 14px 16px;
+  padding: 10px 12px;
 }
 
 .card-header {
@@ -242,14 +243,14 @@ h1 {
 .chart-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--card-gap);
 }
 
 /* Stacks full-width cards vertically instead of side by side. */
 .card-stack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--card-gap);
 }
 
 /* Two wide charts plus a narrower summary panel (e.g. a compact stats table). */
@@ -275,8 +276,8 @@ h1 {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 0.5px solid var(--glass-border-inner);
-  border-radius: var(--radius-lg);
-  padding: 12px;
+  border-radius: var(--radius);
+  padding: 8px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -339,8 +340,6 @@ h1 {
 
 .level-badge {
   display: inline-block;
-  padding: 1px 7px;
-  border-radius: var(--radius-sm);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.3px;
@@ -348,26 +347,25 @@ h1 {
      is the domain's own notation rather than a styling choice. */
   font-family: var(--font-mono);
   white-space: nowrap;
-  background: var(--fill);
   color: var(--label-secondary);
 }
 
-.level-badge.level-debug    { background: rgba(150,150,150,0.15); color: var(--label-tertiary); }
-.level-badge.level-info     { background: rgba(64,156,255,0.12);  color: var(--syntax-link); }
-.level-badge.level-warning  { background: rgba(255,214,10,0.12);  color: var(--warning); }
-.level-badge.level-error    { background: var(--danger-soft);     color: var(--danger); }
-.level-badge.level-critical { background: rgba(255,69,58,0.25);   color: var(--danger); font-weight: 700; }
+.level-badge.level-debug    { color: var(--label-tertiary); }
+.level-badge.level-info     { color: var(--syntax-link); }
+.level-badge.level-warning  { color: var(--warning); }
+.level-badge.level-error    { color: var(--danger); }
+.level-badge.level-critical { color: var(--danger); font-weight: 700; }
 
 /* ── Log section ───────────────────────────────────────── */
 
 .log-histogram-chart {
-  margin-top: 10px;
-  padding: 12px;
+  margin-top: 8px;
+  padding: 8px;
   background: var(--glass-bg-deep);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 0.5px solid var(--glass-border-inner);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   height: 160px;
   overflow: hidden;
 }
@@ -389,7 +387,7 @@ h1 {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 0.5px solid var(--glass-border-inner);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
 }
 
 .filter-group {
@@ -414,7 +412,7 @@ h1 {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 0.5px solid var(--glass-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   color: var(--label);
   font-size: 13px;
   outline: none;
@@ -453,7 +451,7 @@ h1 {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 0.5px solid var(--glass-border-inner);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.7;
@@ -484,7 +482,7 @@ h1 {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 0.5px solid var(--glass-border-inner);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   cursor: pointer;
   text-align: left;
   font-family: var(--font-mono);
@@ -513,7 +511,7 @@ h1 {
   padding: 3px 5px;
   background: transparent;
   border: 0.5px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius);
   color: var(--label-tertiary);
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s, background 0.12s;
@@ -550,7 +548,7 @@ h1 {
   min-width: 40px;
   padding: 2px 8px;
   background: var(--fill);
-  border-radius: 999px;
+  border-radius: var(--radius);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -568,7 +566,7 @@ h1 {
 .error-banner {
   grid-column: 1 / -1;
   padding: 12px 16px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   border: 0.5px solid rgba(255, 69, 58, 0.4);
   background: var(--danger-soft);
   color: var(--danger-text);
@@ -580,8 +578,8 @@ h1 {
 .project-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
-  padding: 16px var(--page-gutter) 32px;
+  gap: var(--card-gap);
+  padding: 12px var(--page-gutter) 24px;
   max-width: 1200px;
 }
 
@@ -691,7 +689,7 @@ h1 {
 .ts-top-row {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr;
-  gap: 12px;
+  gap: var(--card-gap);
   align-items: stretch;
 }
 
@@ -718,6 +716,8 @@ h1 {
 
 .chart-card--inset {
   background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: none;
   padding: 0;
   height: 120px;
@@ -730,7 +730,7 @@ h1 {
 
 .stat-row {
   display: flex;
-  gap: 16px;
+  gap: var(--card-gap);
   align-items: stretch;
 }
 
@@ -831,7 +831,7 @@ h1 {
   align-items: center;
   gap: 9px;
   padding: 6px 10px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   color: var(--label-secondary);
   text-decoration: none;
   font-size: 12.5px;
@@ -880,7 +880,7 @@ h1 {
   padding: 0;
   background: transparent;
   border: 0.5px solid var(--separator);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   color: var(--label-tertiary);
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s;
