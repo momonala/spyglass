@@ -269,7 +269,7 @@ def query_metric_summary(
     to_ts: datetime,
     tags: dict[str, str] | None = None,
 ) -> dict:
-    """Return latest value, window sum, and window min/avg/max for a metric."""
+    """Return latest value and when it landed, window sum, and window min/avg/max for a metric."""
     slug = store.get_slug(project)
     metric_type = _metric_type_for_name(store, slug, name)
     tag_clauses = _tag_filter_clauses(tags)
@@ -285,7 +285,7 @@ def query_metric_summary(
         ]
 
         latest_stmt = (
-            select(MetricPoint.value)
+            select(MetricPoint.value, MetricPoint.timestamp)
             .where(MetricPoint.name_id == name_id, *tag_clauses)
             .order_by(MetricPoint.timestamp.desc())
             .limit(1)
@@ -297,7 +297,7 @@ def query_metric_summary(
             func.max(MetricPoint.value).label("maximum"),
         ).where(*window_filter)
 
-        latest = session.execute(latest_stmt).scalar_one_or_none()
+        latest = session.execute(latest_stmt).one_or_none()
         agg = session.execute(agg_stmt).one_or_none()
         timing_values: list[float] | None = None
         if metric_type == MetricType.TIMING.value:
@@ -316,7 +316,8 @@ def query_metric_summary(
 
     result = {
         "metric_type": metric_type,
-        "latest_value": _f(latest),
+        "latest_value": _f(latest.value) if latest else None,
+        "latest_at": latest.timestamp.replace(tzinfo=UTC).timestamp() if latest else None,
         "sum": _f(total),
         "min": _f(minimum),
         "avg": _f(average),

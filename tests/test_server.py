@@ -3,6 +3,9 @@
 Covers registration, ingest, read queries, and validation errors.
 """
 
+from datetime import UTC
+from datetime import datetime
+
 
 def test_health(client):
     resp = client.get("/status")
@@ -204,3 +207,42 @@ def test_projects_are_isolated(client):
     assert alpha_rows[0]["value"] == 1.0
     assert len(beta_rows) == 1
     assert beta_rows[0]["value"] == 99.0
+
+
+def test_metric_summary_reports_when_the_latest_matching_point_landed(client):
+    name = "my-api.post.received"
+    client.post(
+        "/metrics",
+        json={
+            "project": "my-api",
+            "points": [
+                {
+                    "name": name,
+                    "metric_type": "counter",
+                    "value": 1,
+                    "tags": {"device": "air"},
+                    "timestamp": "2026-10-25T08:00:00Z",
+                },
+                {
+                    "name": name,
+                    "metric_type": "counter",
+                    "value": 1,
+                    "tags": {"device": "pro"},
+                    "timestamp": "2026-10-25T09:00:00Z",
+                },
+            ],
+        },
+    )
+
+    resp = client.get(
+        "/dashboard/api/metrics/summary",
+        query_string={
+            "project": "my-api",
+            "name": name,
+            "tag_device": "air",
+            "from": "2026-10-25T00:00:00Z",
+            "to": "2026-10-26T00:00:00Z",
+        },
+    )
+
+    assert resp.get_json()["latest_at"] == datetime(2026, 10, 25, 8, tzinfo=UTC).timestamp()

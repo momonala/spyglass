@@ -7,8 +7,8 @@
   <div class="card-full stat-row">
 
     <div class="chart-card col-1">
-      <h3 class="chart-title">Analytics query duration</h3>
-      <canvas id="chartDuration" aria-label="Analytics query duration over time"></canvas>
+      <h3 class="chart-title">Endpoint latency (ms)</h3>
+      <canvas id="chartLatency" aria-label="Request latency per endpoint over time"></canvas>
     </div>
 
     <div class="chart-card col-1">
@@ -16,9 +16,27 @@
       <canvas id="chartDbWrites" aria-label="DB writes over time"></canvas>
     </div>
 
+  </div>
+
+  <div class="card-full stat-row">
+
+    <section class="card col-1" aria-labelledby="devicesHeading">
+      <div class="card-header">
+        <h2 id="devicesHeading">Devices</h2>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr><th>Mac</th><th>Last quota push</th><th>Records pushed</th></tr>
+        </thead>
+        <tbody id="devicesBody">
+          <tr><td colspan="3">—</td></tr>
+        </tbody>
+      </table>
+    </section>
+
     <section class="card col-1" aria-labelledby="ingestHeading">
       <div class="card-header">
-        <h2 id="ingestHeading">Ingest &amp; Backfill</h2>
+        <h2 id="ingestHeading">Ingest</h2>
       </div>
       <div class="stat-grid stat-grid--two-col">
         <div class="stat">
@@ -26,12 +44,44 @@
           <span id="stat-records-inserted" class="stat-value">—</span>
         </div>
         <div class="stat">
+          <span class="stat-label">Records skipped (dupes)</span>
+          <span id="stat-records-skipped" class="stat-value">—</span>
+        </div>
+        <div class="stat">
           <span class="stat-label">Snapshots inserted</span>
           <span id="stat-snapshots-inserted" class="stat-value">—</span>
         </div>
+        <div class="stat">
+          <span class="stat-label">Snapshots skipped (unchanged)</span>
+          <span id="stat-snapshots-skipped" class="stat-value">—</span>
+        </div>
         <div class="stat stat--wide">
-          <span class="stat-label">Backfilled records</span>
+          <span class="stat-label">Rejected payloads</span>
+          <span id="stat-rejected" class="stat-value stat-danger-or-healthy">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card col-1" aria-labelledby="backfillHeading">
+      <div class="card-header">
+        <h2 id="backfillHeading">Daily backfill</h2>
+      </div>
+      <div class="stat-grid stat-grid--two-col">
+        <div class="stat">
+          <span class="stat-label">Records parsed</span>
+          <span id="stat-backfill-parsed" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Records inserted</span>
           <span id="stat-backfill-inserted" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Unreadable files</span>
+          <span id="stat-backfill-unreadable" class="stat-value stat-danger-or-healthy">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Last run took</span>
+          <span id="stat-backfill-duration" class="stat-value">—</span>
         </div>
       </div>
     </section>
@@ -44,11 +94,54 @@
 <script>
 const PROJECT = "claude-usage-notch-server";
 const M = {
-  analyticsDuration: `${PROJECT}.get_analytics.duration`,
-  recordsInserted:   `${PROJECT}.post_records.records_inserted`,
-  snapshotsInserted: `${PROJECT}.post_quota_snapshots.quota_snapshots_inserted`,
-  backfillInserted:  `${PROJECT}.backfill.records_inserted`,
+  postRecordsLatency:  `${PROJECT}.post_records.duration`,
+  getRecordsLatency:   `${PROJECT}.get_records.duration`,
+  postQuotaLatency:    `${PROJECT}.post_quota_snapshots.duration`,
+  getQuotaLatency:     `${PROJECT}.get_quota_snapshots.duration`,
+  analyticsLatency:    `${PROJECT}.get_analytics.duration`,
+
+  recordsInserted:     `${PROJECT}.post_records.records_inserted`,
+  recordsSkipped:      `${PROJECT}.post_records.records_skipped`,
+  recordsRejected:     `${PROJECT}.post_records.payload_rejected`,
+  quotaReceived:       `${PROJECT}.post_quota_snapshots.received`,
+  snapshotsInserted:   `${PROJECT}.post_quota_snapshots.quota_snapshots_inserted`,
+  snapshotsSkipped:    `${PROJECT}.post_quota_snapshots.quota_snapshots_skipped`,
+  snapshotsRejected:   `${PROJECT}.post_quota_snapshots.payload_rejected`,
+
+  backfillParsed:      `${PROJECT}.backfill.records_parsed`,
+  backfillInserted:    `${PROJECT}.backfill.records_inserted`,
+  backfillUnreadable:  `${PROJECT}.backfill.files_unreadable`,
+  backfillDuration:    `${PROJECT}.backfill.duration`,
 };
+
+const QUIET_DEVICE_MS = 60 * 60 * 1000;
+
+async function fillDevices(win, signal) {
+  const body = document.getElementById("devicesBody");
+  const { values: devices } = await fetchTagValues(PROJECT, M.quotaReceived, "device", signal);
+  const rows = await Promise.all(devices.map(async (device) => {
+    const tags = { device };
+    const [received, records] = await Promise.all([
+      fetchSummary(PROJECT, M.quotaReceived, win, signal, tags),
+      fetchSummary(PROJECT, M.recordsInserted, win, signal, tags),
+    ]);
+    return { device, lastPushAt: received.latest_at, records: records.sum };
+  }));
+  rows.sort((a, b) => (b.lastPushAt ?? 0) - (a.lastPushAt ?? 0));
+
+  body.replaceChildren(...rows.map(({ device, lastPushAt, records }) => {
+    const ageMs = lastPushAt == null ? null : Date.now() - lastPushAt * 1000;
+    const tr = document.createElement("tr");
+    const cells = [device, ageMs == null ? "—" : `${fmt.duration(ageMs)} ago`, fmt.count(records)];
+    for (const text of cells) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    tr.children[1].classList.toggle("stat-warn", ageMs != null && ageMs > QUIET_DEVICE_MS);
+    return tr;
+  }));
+}
 
 initDashboard({
   project: PROJECT,
@@ -57,8 +150,12 @@ initDashboard({
   defaultRollupMinutes: 15,
   loadFn: async (win, signal) => {
     await Promise.allSettled([
-      buildLineChart("chartDuration", PROJECT, [
-        { label: "analytics (ms)", metricName: M.analyticsDuration, color: COLORS.accent },
+      buildLineChart("chartLatency", PROJECT, [
+        { label: "POST records",   metricName: M.postRecordsLatency, color: COLORS.accent },
+        { label: "POST quota",     metricName: M.postQuotaLatency,   color: COLORS.success },
+        { label: "GET records",    metricName: M.getRecordsLatency,  color: COLORS.warn },
+        { label: "GET quota",      metricName: M.getQuotaLatency,    color: COLORS.muted },
+        { label: "GET analytics",  metricName: M.analyticsLatency,   color: COLORS.purple },
       ], win, signal),
 
       buildLineChart("chartDbWrites", PROJECT, [
@@ -67,11 +164,27 @@ initDashboard({
         { label: "Backfilled records", metricName: M.backfillInserted,  color: COLORS.purple,  fill: true },
       ], win, signal),
 
+      fillDevices(win, signal),
+
       fillStats(PROJECT, [
         { elementId: "stat-records-inserted",   metricName: M.recordsInserted,   pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-records-skipped",    metricName: M.recordsSkipped,    pick: (s) => s.sum, format: "count" },
         { elementId: "stat-snapshots-inserted", metricName: M.snapshotsInserted, pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-snapshots-skipped",  metricName: M.snapshotsSkipped,  pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-backfill-parsed",    metricName: M.backfillParsed,    pick: (s) => s.latest_value, format: "count" },
         { elementId: "stat-backfill-inserted",  metricName: M.backfillInserted,  pick: (s) => s.sum, format: "count" },
+        { elementId: "stat-backfill-unreadable", metricName: M.backfillUnreadable, pick: (s) => s.latest_value, format: "count",
+          danger: (s) => (s.latest_value ?? 0) > 0 },
+        { elementId: "stat-backfill-duration",  metricName: M.backfillDuration,  pick: (s) => s.latest_value, format: "durationPrecise" },
       ], win, signal),
+
+      fillDerivedStat(PROJECT, {
+        elementId: "stat-rejected",
+        sources: [{ metricName: M.recordsRejected }, { metricName: M.snapshotsRejected }],
+        compute: ([records, snapshots]) => (records?.sum ?? 0) + (snapshots?.sum ?? 0),
+        format: "count",
+        danger: (_summaries, value) => value > 0,
+      }, win, signal),
     ]);
   },
 });
