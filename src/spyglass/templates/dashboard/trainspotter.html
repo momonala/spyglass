@@ -104,13 +104,10 @@
 
 {% block script %}
 <script>
-// Metric naming: {project}.{caller_function}.{stat}
-// Context manager timings (__enter__) and direct function calls produce different prefixes.
-// Verify names against /dashboard/api/metrics/names?project=trainspotter if charts are empty.
 const PROJECT = "trainspotter";
 const M = {
-  stationsLatency: `${PROJECT}.__enter__.stations`,
-  displayLatency:  `${PROJECT}.__enter__.display_data`,
+  stationsLatency: `${PROJECT}.api_stations.stations`,
+  displayLatency:  `${PROJECT}.api_display_data.display_data`,
   vbbFetch:        `${PROJECT}.get_departures.vbb.fetch`,
   vbbError:        `${PROJECT}.get_departures.vbb.error`,
   vbbSuccess:      `${PROJECT}.get_departures.vbb.success`,

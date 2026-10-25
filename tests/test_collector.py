@@ -94,3 +94,34 @@ def test_prefix_true_prepends_project_and_caller(monkeypatch):
     # Format: {project}.{caller}.{stat}
     assert name.startswith("myproject.")
     assert name.endswith(".requests")
+
+
+def test_timed_context_manager_names_after_enclosing_function(monkeypatch):
+    sent = []
+    collector = MetricsCollector(host="localhost:19999", project="p")
+    monkeypatch.setattr(collector, "_send_point", lambda *a, **kw: sent.append(a))
+
+    with collector.timed("op"):
+        pass
+
+    assert sent[0][:2] == (
+        MetricType.TIMING,
+        "p.test_timed_context_manager_names_after_enclosing_function.op",
+    )
+
+
+def test_timed_decorator_names_after_decorated_function(monkeypatch):
+    sent = []
+    collector = MetricsCollector(host="localhost:19999", project="p")
+    monkeypatch.setattr(collector, "_send_point", lambda *a, **kw: sent.append(a))
+
+    @collector.timed("op")
+    def handler():
+        return 42
+
+    def framework_dispatch():
+        return handler()
+
+    assert framework_dispatch() == 42
+    assert framework_dispatch.__name__ != handler.__name__
+    assert sent[0][:2] == (MetricType.TIMING, "p.handler.op")

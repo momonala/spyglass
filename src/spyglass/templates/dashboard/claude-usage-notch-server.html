@@ -64,15 +64,10 @@
 
 {% block script %}
 <script>
-// Metric naming: {project}.{caller_function}.{stat}
-// `with metrics.timed(...)` resolves the caller frame to the context manager's own
-// __enter__, not the function that opened it — so poll_quota's `claude /usage` call
-// and get_analytics' DB query both report under the same `__enter__.duration` name.
-// Verify names against /dashboard/api/metrics/names?project=claude-usage-notch-server
-// if charts are empty.
 const PROJECT = "claude-usage-notch-server";
 const M = {
-  duration: `${PROJECT}.__enter__.duration`,
+  pollDuration:      `${PROJECT}.poll_quota.duration`,
+  analyticsDuration: `${PROJECT}.get_analytics.duration`,
 
   pollSuccess:  `${PROJECT}.poll_quota.success`,
   claudeError:  `${PROJECT}.poll_quota.claude_error`,
@@ -95,7 +90,8 @@ initDashboard({
   loadFn: async (win, signal) => {
     await Promise.allSettled([
       buildLineChart("chartDuration", PROJECT, [
-        { label: "duration (ms)", metricName: M.duration, color: COLORS.accent },
+        { label: "poll (ms)",      metricName: M.pollDuration,      color: COLORS.accent },
+        { label: "analytics (ms)", metricName: M.analyticsDuration, color: COLORS.success },
       ], win, signal),
 
       buildLineChart("chartDbWrites", PROJECT, [

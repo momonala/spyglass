@@ -180,10 +180,10 @@
 const PROJECT = "energy-monitor";
 const M = {
   mqttReceived:  `${PROJECT}.on_message.mqtt.messages.mqtt_reading`,
-  dbSaved:       `${PROJECT}.save_energy_reading.db.readings.saved`,
+  dbSaved:       `${PROJECT}.save_energy_readings.db.readings.saved`,
   dbDuplicate:   `${PROJECT}.save_energy_reading.db.readings.duplicate`,
   dbErrors:      `${PROJECT}.db_worker.mqtt.db_save.errors`,
-  dbLatency:     `${PROJECT}.__enter__.db.save_reading`,
+  dbLatency:     `${PROJECT}.save_energy_readings.db.save_readings`,
   disconnect:    `${PROJECT}.on_disconnect.mqtt.disconnect`,
   deviceOffline: `${PROJECT}.handle_lwt_status.mqtt.device.offline`,
   deviceErrors:  `${PROJECT}.on_message.mqtt.device.errors`,

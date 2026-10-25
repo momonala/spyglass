@@ -1,11 +1,11 @@
 """MetricsCollector: emits counters, gauges, timings, and sets to the Spyglass server."""
 
+import functools
 import inspect
 import json
 import logging
 import time
-from collections.abc import Generator
-from contextlib import contextmanager
+from collections.abc import Callable
 from datetime import UTC
 from datetime import datetime
 
@@ -22,19 +22,11 @@ _log = logging.getLogger(__name__)
 SPYGLASS_PACKAGE = "spyglass"
 
 
-_INFRA_MODULES = {"contextlib"}
-
-
 def _caller_function() -> str:
-    """Walk the call stack and return the first function name outside of spyglass.
-
-    Also skips ``contextlib`` frames (e.g. ``_GeneratorContextManager.__enter__``),
-    which sit between ``timed()``'s generator and the code that opened it whenever
-    ``timed`` is used via a ``with`` block.
-    """
+    """Walk the call stack and return the first function name outside of spyglass."""
     for frame_info in inspect.stack():
         module = frame_info.frame.f_globals.get("__name__", "")
-        if not module.startswith(SPYGLASS_PACKAGE) and module not in _INFRA_MODULES:
+        if not module.startswith(SPYGLASS_PACKAGE):
             return frame_info.function
     return "<unknown>"
 
@@ -116,11 +108,11 @@ class MetricsCollector:
         """Record a set membership value."""
         self._emit(MetricType.SET, stat, value, tags, prefix)
 
-    @contextmanager
-    def timed(
-        self, stat: str, *, tags: dict | None = None, prefix: bool = True
-    ) -> Generator[None, None, None]:
-        """Context manager that measures elapsed time and emits a timing metric.
+    def timed(self, stat: str, *, tags: dict | None = None, prefix: bool = True) -> "_Timer":
+        """Measure elapsed time and emit a timing metric, as a context manager or a decorator.
+
+        As a decorator the stat is prefixed with the decorated function's name, not the
+        framework function that calls it.
 
         Args:
             stat: Stat name (will be prefixed unless ``prefix=False``).
@@ -131,15 +123,11 @@ class MetricsCollector:
 
             with collector.timed("db_query"):
                 run_query()
+
+            @collector.timed("handler")
+            def handle(): ...
         """
-        caller = _caller_function()
-        start = time.perf_counter()
-        try:
-            yield
-        finally:
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            name = self._build_name(caller, stat, prefix)
-            self._send_point(MetricType.TIMING, name, elapsed_ms, tags)
+        return _Timer(self, stat, tags, prefix)
 
     def _build_name(self, caller: str, stat: str, prefix: bool) -> str:
         return f"{self.project}.{caller}.{stat}" if prefix else stat
@@ -189,3 +177,36 @@ class MetricsCollector:
             )
         except requests.RequestException as exc:
             _log.debug("spyglass project registration failed: %s", exc)
+
+
+class _Timer:
+    def __init__(self, collector: MetricsCollector, stat: str, tags: dict | None, prefix: bool) -> None:
+        self._collector = collector
+        self._stat = stat
+        self._tags = tags
+        self._prefix = prefix
+        self._caller = "<unknown>"
+        self._start = 0.0
+
+    def __enter__(self) -> None:
+        self._caller = _caller_function()
+        self._start = time.perf_counter()
+
+    def __exit__(self, *exc_info: object) -> None:
+        self._emit(self._caller, self._start)
+
+    def __call__(self, func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            start = time.perf_counter()
+            try:
+                return func(*args, **kwargs)
+            finally:
+                self._emit(func.__name__, start)
+
+        return wrapper
+
+    def _emit(self, caller: str, start: float) -> None:
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        name = self._collector._build_name(caller, self._stat, self._prefix)
+        self._collector._send_point(MetricType.TIMING, name, elapsed_ms, self._tags)
