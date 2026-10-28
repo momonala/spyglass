@@ -48,7 +48,6 @@
               <th scope="col">Events</th>
               <th scope="col">Outage duration</th>
               <th scope="col">Parity</th>
-              <th scope="col">MQTT Interval</th>
               <th scope="col">Database</th>
             </tr>
           </thead>
@@ -70,12 +69,6 @@
                 <div class="stat">
                   <span class="stat-label">MQTT received</span>
                   <span id="stat-mqtt" class="stat-value">—</span>
-                </div>
-              </td>
-              <td>
-                <div class="stat">
-                  <span class="stat-label">Min</span>
-                  <span id="stat-interval-min" class="stat-value">—</span>
                 </div>
               </td>
               <td>
@@ -106,12 +99,6 @@
               </td>
               <td>
                 <div class="stat">
-                  <span class="stat-label">Max</span>
-                  <span id="stat-interval-max" class="stat-value">—</span>
-                </div>
-              </td>
-              <td>
-                <div class="stat">
                   <span class="stat-label">DB size</span>
                   <span id="stat-db-size" class="stat-value">—</span>
                 </div>
@@ -134,12 +121,6 @@
                 <div class="stat">
                   <span class="stat-label">Duplicates</span>
                   <span id="stat-dup" class="stat-value">—</span>
-                </div>
-              </td>
-              <td>
-                <div class="stat">
-                  <span class="stat-label">Avg</span>
-                  <span id="stat-interval-avg" class="stat-value">—</span>
                 </div>
               </td>
               <td></td>
@@ -190,7 +171,6 @@ const M = {
   lowReadings:   `${PROJECT}.log_db_health_check.db.health.low_readings`,
   lastHour:      `${PROJECT}.log_db_health_check.db.readings.last_hour`,
   dbSizeMb:      `${PROJECT}.log_db_health_check.db.size_mb`,
-  interval:      `${PROJECT}.on_message.mqtt.sensor.interval_ms`,
   deviceOnline:  `${PROJECT}.handle_lwt_status.mqtt.device.online`,
   downtime:      `${PROJECT}.handle_lwt_status.mqtt.device.downtime_ms`,
 };
@@ -240,12 +220,6 @@ initDashboard({
           danger: (s) => (s.sum ?? 0) > 0 },
         { elementId: "stat-downtime-max",   metricName: M.downtime,      pick: (s) => s.max, format: "duration" },
         { elementId: "stat-downtime-avg",   metricName: M.downtime,      pick: (s) => s.avg, format: "duration" },
-      ], win, signal),
-
-      fillStats(PROJECT, [
-        { elementId: "stat-interval-min", metricName: M.interval, pick: (s) => s.min, format: "seconds" },
-        { elementId: "stat-interval-avg", metricName: M.interval, pick: (s) => s.avg, format: "seconds" },
-        { elementId: "stat-interval-max", metricName: M.interval, pick: (s) => s.max, format: "seconds" },
       ], win, signal),
     ]);
   },

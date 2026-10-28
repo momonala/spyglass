@@ -52,18 +52,6 @@
           <span class="stat-label">Success rate</span>
           <span id="stat-vbb-success-rate" class="stat-value stat-danger-or-healthy">—</span>
         </div>
-        <div class="stat">
-          <span class="stat-label">Fetch p95 (ok)</span>
-          <span id="stat-vbb-p95-ok" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Fetch p95</span>
-          <span id="stat-vbb-p95" class="stat-value">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Fetch avg</span>
-          <span id="stat-vbb-avg" class="stat-value">—</span>
-        </div>
       </div>
     </section>
 
@@ -89,15 +77,6 @@
       </div>
     </section>
 
-    <section class="card" style="flex:1;min-width:0;" aria-labelledby="vbbFetchHeading">
-      <div class="card-header">
-        <h2 id="vbbFetchHeading">VBB fetch latency</h2>
-      </div>
-      <div class="chart-card chart-card--inset">
-        <canvas id="chartVbbFetch" aria-label="VBB fetch latency by outcome"></canvas>
-      </div>
-    </section>
-
   </div>
 
 {% endblock %}
@@ -108,7 +87,6 @@ const PROJECT = "trainspotter";
 const M = {
   stationsLatency: `${PROJECT}.api_stations.stations`,
   displayLatency:  `${PROJECT}.api_display_data.display_data`,
-  vbbFetch:        `${PROJECT}.get_departures.vbb.fetch`,
   vbbError:        `${PROJECT}.get_departures.vbb.error`,
   vbbSuccess:      `${PROJECT}.get_departures.vbb.success`,
   display502:      `${PROJECT}.api_display_data.response.502`,
@@ -142,11 +120,6 @@ initDashboard({
         })),
         win, signal),
 
-      buildLineChart("chartVbbFetch", PROJECT, [
-        { label: "ok (ms)",    metricName: M.vbbFetch, color: COLORS.success, tags: { outcome: "ok" } },
-        { label: "error (ms)", metricName: M.vbbFetch, color: COLORS.danger,  tags: { outcome: "error" } },
-      ], win, signal),
-
       fillStats(PROJECT, [
         { elementId: "stat-display-requests", metricName: M.displayLatency, pick: (s) => s.count, format: "count" },
         { elementId: "stat-failed",           metricName: M.display502,     pick: (s) => s.sum, format: "count",
@@ -174,10 +147,6 @@ initDashboard({
         { elementId: "stat-vbb-errors",  metricName: M.vbbError,   pick: (s) => s.sum, format: "count",
           danger: (s) => (s.sum ?? 0) > 0 },
         { elementId: "stat-vbb-success", metricName: M.vbbSuccess, pick: (s) => s.sum, format: "count" },
-        { elementId: "stat-vbb-p95-ok", metricName: M.vbbFetch, pick: (s) => s.p95 ?? s.max, format: "ms",
-          tags: { outcome: "ok" } },
-        { elementId: "stat-vbb-p95",     metricName: M.vbbFetch, pick: (s) => s.p95 ?? s.max, format: "ms" },
-        { elementId: "stat-vbb-avg",     metricName: M.vbbFetch, pick: (s) => s.avg, format: "ms" },
       ], win, signal),
 
       fillDerivedStat(PROJECT, {
