@@ -96,8 +96,9 @@ from spyglass import initialize
 
 logger, metrics = initialize(host="localhost:5013", project="my-api")
 
+
 def handle_request():
-    metrics.increment("requests")   # → my-api.handle_request.requests
+    metrics.increment("requests")  # → my-api.handle_request.requests
     metrics.gauge("queue_depth", 3)
     with metrics.timed("db_query"):
         ...
@@ -312,7 +313,7 @@ Retention deletes rows older than each project's `retention_days` (from `data/{s
 ```bash
 uv sync
 uv run --with pytest --with pytest-cov pytest                              # Python tests + coverage (see pyproject.toml addopts)
-uvx black . --check                     # formatting
+uvx ruff format --check .               # formatting
 uvx ruff check .                        # linting
 node --test tests/*.mjs                    # dashboard-lib.js tests (not currently wired into CI)
 ```

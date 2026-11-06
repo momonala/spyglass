@@ -30,15 +30,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/spyglass"]
 
-
 [project.scripts]
 spyglass-config = "spyglass.config:main"
 spyglass = "spyglass.cli:main"
-
-[tool.black]
-line-length = 110
-target-version = ['py312']
-include = '\.pyi?$'
 
 [tool.mypy]
 python_version = "3.12"
