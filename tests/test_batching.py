@@ -12,22 +12,6 @@ from spyglass.client.collector import MetricsCollector
 from spyglass.client.logging import SpyglassHandler
 
 
-class _FakeResponse:
-    status_code = 201
-
-
-@pytest.fixture
-def posts(monkeypatch):
-    sent: list[tuple[str, dict]] = []
-
-    def _fake_post(self, url, json=None, timeout=None):
-        sent.append((url, json))
-        return _FakeResponse()
-
-    monkeypatch.setattr("requests.Session.post", _fake_post)
-    return sent
-
-
 def _tags_key(point):
     return json.dumps(point["tags"], sort_keys=True) if "tags" in point else None
 

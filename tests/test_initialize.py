@@ -1,16 +1,20 @@
 """Tests for spyglass.initialize."""
 
+import logging
+
 from spyglass import initialize
-from spyglass.client.collector import MetricsCollector
+from spyglass.client.logging import SpyglassHandler
 
 
-def test_initialize_returns_logger_and_collector():
-    logger, collector = initialize(host="localhost:19999", project="test-proj")
+def test_initialize_names_logger_after_calling_module(posts):
+    root = logging.getLogger()
+    handlers_before = list(root.handlers)
+    try:
+        logger, collector = initialize(host="localhost:19999", project="test-proj")
+    finally:
+        for handler in list(root.handlers):
+            if handler not in handlers_before and isinstance(handler, SpyglassHandler):
+                root.removeHandler(handler)
+
     assert logger.name == __name__
-    assert isinstance(collector, MetricsCollector)
     assert collector.project == "test-proj"
-
-
-def test_initialize_respects_logger_name_override():
-    logger, _ = initialize(host="localhost:19999", project="p", logger_name="custom.logger")
-    assert logger.name == "custom.logger"

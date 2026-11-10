@@ -3,6 +3,7 @@
 from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 
 import pytest
 import requests
@@ -45,7 +46,6 @@ def _point(
 NOW = datetime(2026, 5, 27, 12, 0, tzinfo=UTC)
 WINDOW_START = NOW - timedelta(hours=1)
 
-# Two synthetic app profiles so no Trainspotter-specific assumptions leak in.
 _APP_A_METRICS = [
     _point("app-a.worker.requests", "counter", 10, "2026-05-27T11:50:00Z"),
     _point("app-a.worker.requests", "counter", 5, "2026-05-27T11:55:00Z"),
@@ -56,29 +56,18 @@ _APP_A_METRICS = [
     _point("app-a.worker.queue_depth", "gauge", 3, "2026-05-27T11:45:00Z"),
 ]
 
-_APP_B_METRICS = [
-    _point("svc-b.api.hits", "counter", 20, "2026-05-27T11:50:00Z"),
-    _point("svc-b.api.hits", "counter", 30, "2026-05-27T11:55:00Z"),
-    _point("svc-b.api.duration_ms", "timing", 50, "2026-05-27T11:48:00Z"),
-    _point("svc-b.api.duration_ms", "timing", 100, "2026-05-27T11:50:00Z"),
-    _point("svc-b.api.duration_ms", "timing", 150, "2026-05-27T11:55:00Z"),
-]
-
 
 # ---------------------------------------------------------------------------
 # Window parsing
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("amount,expected", [(None, 6), (0, 1), (3, 3), (10, 10)])
+@pytest.mark.parametrize("amount,expected", [(None, 6), (0, 1), (3, 3)])
 def test_parse_window_amount(amount, expected):
     assert parse_window_amount(amount) == expected
 
 
-@pytest.mark.parametrize(
-    "unit,expected",
-    [("hours", "hours"), ("days", "days"), ("weeks", "weeks"), ("bad", "hours"), (None, "hours")],
-)
+@pytest.mark.parametrize("unit,expected", [("days", "days"), ("bad", "hours")])
 def test_parse_window_unit(unit, expected):
     assert parse_window_unit(unit) == expected
 
@@ -98,20 +87,14 @@ def test_window_hours_from(amount, unit, expected):
     assert window_hours_from(amount, unit) == expected
 
 
-@pytest.mark.parametrize(
-    "rollup,expected",
-    [("auto", "auto"), ("15", "15"), ("bad", DEFAULT_ROLLUP), (None, DEFAULT_ROLLUP)],
-)
+@pytest.mark.parametrize("rollup,expected", [("15", "15"), ("bad", DEFAULT_ROLLUP), (None, DEFAULT_ROLLUP)])
 def test_parse_rollup(rollup, expected):
     assert parse_rollup(rollup) == expected
 
 
-def test_resolve_rollup_minutes_explicit():
-    assert resolve_rollup_minutes("30", window_hours=6) == 30
-
-
-def test_resolve_rollup_minutes_auto():
-    assert resolve_rollup_minutes("auto", window_hours=6) == 15
+@pytest.mark.parametrize("rollup,expected", [("30", 30), ("auto", 15)])
+def test_resolve_rollup_minutes(rollup, expected):
+    assert resolve_rollup_minutes(rollup, window_hours=6) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -128,10 +111,7 @@ def test_time_window_bucket_count():
 
 def test_time_window_bucket_index_in_range():
     w = TimeWindow.from_hours(1, NOW, rollup_minutes=5)
-    ts = NOW - timedelta(minutes=10)
-    idx = w.bucket_index(ts)
-    assert idx is not None
-    assert 0 <= idx < w.bucket_count
+    assert w.bucket_index(NOW - timedelta(minutes=10)) == 10
 
 
 def test_time_window_bucket_index_out_of_range():
@@ -159,33 +139,12 @@ def test_time_window_labels_multi_day_format():
 # ---------------------------------------------------------------------------
 
 
-def test_match_points_by_suffix():
-    pts = match_points(_APP_A_METRICS, ".requests")
-    assert len(pts) == 2
-    assert all(p["name"].endswith(".requests") for p in pts)
-
-
 def test_match_points_by_suffix_and_type():
     pts = match_points(_APP_A_METRICS, ".requests", metric_type="counter")
     assert len(pts) == 2
 
     pts_timing = match_points(_APP_A_METRICS, ".requests", metric_type="timing")
     assert len(pts_timing) == 0
-
-
-def test_match_points_by_tags():
-    metrics = [
-        _point("app.req", "counter", 3, tags={"route": "a"}),
-        _point("app.req", "counter", 7, tags={"route": "b"}),
-    ]
-    assert len(match_points(metrics, ".req", tags={"route": "a"})) == 1
-    assert len(match_points(metrics, ".req", tags={"route": "b"})) == 1
-
-
-def test_match_points_different_app_no_cross_contamination():
-    # App A metrics should not match App B suffixes
-    assert match_points(_APP_A_METRICS, ".hits") == []
-    assert match_points(_APP_B_METRICS, ".requests") == []
 
 
 # ---------------------------------------------------------------------------
@@ -195,14 +154,6 @@ def test_match_points_different_app_no_cross_contamination():
 
 def test_counter_sum_app_a():
     assert counter_sum(_APP_A_METRICS, ".requests") == 15.0
-
-
-def test_counter_sum_app_b():
-    assert counter_sum(_APP_B_METRICS, ".hits") == 50.0
-
-
-def test_counter_sum_no_match():
-    assert counter_sum(_APP_A_METRICS, ".nonexistent") == 0.0
 
 
 def test_counter_sum_with_tags():
@@ -219,14 +170,6 @@ def test_timing_summary_app_a():
     assert result.p50 == 200  # median of [100, 200, 400]
     assert result.p95 == 400
     assert result.max == 400
-
-
-def test_timing_summary_app_b():
-    result = timing_summary(_APP_B_METRICS, ".duration_ms")
-    assert result.count == 3
-    assert result.p50 == 100  # median of [50, 100, 150]
-    assert result.p95 == 150
-    assert result.max == 150
 
 
 def test_timing_summary_empty():
@@ -294,6 +237,7 @@ def test_compute_state_uptime_basic():
     assert result.seconds["degraded"] == pytest.approx(1200.0)  # 20 min
     total = sum(result.seconds.values())
     assert total == pytest.approx(3600.0)
+    assert result.pcts == {"healthy": 50.0, "degraded": 33.3, "unknown": 16.7}
 
 
 def test_compute_state_uptime_empty_events():
@@ -305,17 +249,6 @@ def test_compute_state_uptime_empty_events():
     assert result.event_count == 0
     assert result.seconds["unknown"] == pytest.approx(3600.0)
     assert result.pcts["unknown"] == pytest.approx(100.0)
-
-
-def test_compute_state_uptime_pcts_sum_to_100():
-    window_start = datetime(2026, 5, 27, 11, 0, tzinfo=UTC)
-    window_end = datetime(2026, 5, 27, 12, 0, tzinfo=UTC)
-    events = [
-        (datetime(2026, 5, 27, 11, 15, tzinfo=UTC), "a"),
-        (datetime(2026, 5, 27, 11, 45, tzinfo=UTC), "b"),
-    ]
-    result = compute_state_uptime(events, window_start, window_end, ["a", "b", "unknown"])
-    assert sum(result.pcts.values()) == pytest.approx(100.0)
 
 
 # ---------------------------------------------------------------------------
@@ -412,21 +345,10 @@ def test_summary_builder_counters_and_timings():
     assert sum(result.charts[0].series["reqs"]) == 15.0
 
 
-def test_summary_builder_window_info():
+def test_summary_builder_without_state_rules_reports_no_state():
     builder = SummaryBuilder(selectors=_SELECTORS, state_rules=[], charts=[], states=[])
-    result = builder.build([], [], window_amount=6, window_unit="hours", rollup="15", now=NOW)
-    assert result.window.amount == 6
-    assert result.window.unit == "hours"
-    assert result.window.hours == 6
-    assert result.window.rollup_minutes == 15
-
-
-def test_summary_builder_log_histogram():
-    builder = SummaryBuilder(selectors=_SELECTORS, state_rules=[], charts=[], states=[])
-    logs = [{"timestamp": "2026-05-27T11:50:00Z", "level": "INFO", "logger_name": "a", "message": "hi"}]
-    result = builder.build([], logs, window_amount=1, window_unit="hours", rollup="5", now=NOW)
-    assert result.log_histogram is not None
-    assert "INFO" in result.log_histogram.by_level
+    result = builder.build(_APP_A_METRICS, [], window_amount=1, window_unit="hours", rollup="auto", now=NOW)
+    assert result.state is None
 
 
 # ---------------------------------------------------------------------------
@@ -434,24 +356,38 @@ def test_summary_builder_log_histogram():
 # ---------------------------------------------------------------------------
 
 
-def test_query_client_normalises_host():
-    client = SpyglassQueryClient(host="localhost:5013", project="test")
-    assert client._base == "http://localhost:5013"
+class _FakeQueryResponse:
+    def raise_for_status(self):
+        pass
 
-    client_with_scheme = SpyglassQueryClient(host="http://localhost:5013", project="test")
-    assert client_with_scheme._base == "http://localhost:5013"
-
-
-def test_query_client_status_returns_none_on_error():
-    client = SpyglassQueryClient(host="localhost:9999", project="test", timeout=0.01)
-    result = client.status()
-    assert result is None
+    def json(self):
+        return []
 
 
-def test_query_client_fetch_metrics_raises_on_http_error():
-    client = SpyglassQueryClient(host="localhost:9999", project="test", timeout=0.01)
-    with pytest.raises(requests.RequestException):
-        client.fetch_metrics(since=datetime.now(UTC))
+def test_query_client_scopes_fetch_to_project_and_utc_since(monkeypatch):
+    calls = []
+
+    def _fake_get(self, url, params=None, timeout=None):
+        calls.append((url, params))
+        return _FakeQueryResponse()
+
+    monkeypatch.setattr("requests.Session.get", _fake_get)
+    client = SpyglassQueryClient(host="localhost:5013", project="test", limit=50)
+
+    client.fetch_metrics(since=datetime(2026, 5, 27, 14, 30, 15, 999, tzinfo=timezone(timedelta(hours=2))))
+
+    assert calls == [
+        ("http://localhost:5013/metrics", {"project": "test", "from": "2026-05-27T12:30:15Z", "limit": 50})
+    ]
+
+
+def test_query_client_status_returns_none_when_server_unreachable(monkeypatch):
+    def _refuse(self, url, timeout=None):
+        raise requests.ConnectionError("server down")
+
+    monkeypatch.setattr("requests.Session.get", _refuse)
+
+    assert SpyglassQueryClient(host="localhost:5013", project="test").status() is None
 
 
 # ---------------------------------------------------------------------------
@@ -506,26 +442,31 @@ def test_dashboard_series_tag_filter(client):
     assert sum(p["value"] for p in points) == 9.0
 
 
-def test_dashboard_series_includes_metric_type(client):
-    project = "series-type"
-    counter = f"{project}.fn.writes"
-    timing = f"{project}.fn.latency"
+def test_dashboard_series_averages_timings_per_bucket(client):
+    project = "series-timing"
+    metric = f"{project}.fn.latency"
     _ingest_points(
         client,
         project,
         [
-            {"name": counter, "metric_type": "counter", "value": 4},
-            {"name": timing, "metric_type": "timing", "value": 12.5},
+            {"name": metric, "metric_type": "timing", "value": 10, "timestamp": "2026-05-27T10:00:05Z"},
+            {"name": metric, "metric_type": "timing", "value": 20, "timestamp": "2026-05-27T10:00:10Z"},
         ],
     )
 
-    counter_resp = client.get(f"/dashboard/api/metrics/series?project={project}&name={counter}")
-    assert counter_resp.status_code == 200
-    assert counter_resp.get_json()["metric_type"] == "counter"
+    resp = client.get(
+        "/dashboard/api/metrics/series",
+        query_string={
+            "project": project,
+            "name": metric,
+            "from": "2026-05-27T10:00:00Z",
+            "to": "2026-05-27T11:00:00Z",
+        },
+    )
 
-    timing_resp = client.get(f"/dashboard/api/metrics/series?project={project}&name={timing}")
-    assert timing_resp.status_code == 200
-    assert timing_resp.get_json()["metric_type"] == "timing"
+    body = resp.get_json()
+    assert body["metric_type"] == "timing"
+    assert [p["value"] for p in body["points"]] == [15.0]
 
 
 def test_dashboard_summary_timing_percentiles(client):

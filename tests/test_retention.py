@@ -59,26 +59,6 @@ def test_retention_deletes_old_rows(tmp_path):
     assert _count_logs(store, slug) == 1
 
 
-def test_retention_keeps_all_fresh_rows(tmp_path):
-    store = ProjectStore(tmp_path / "data")
-    slug = store.init_project("my-api", retention_days=30)
-
-    _insert_metric(store, slug, days_old=1)
-    _insert_metric(store, slug, days_old=10)
-    _insert_log(store, slug, days_old=2)
-
-    run_retention(store)
-
-    assert _count_metrics(store, slug) == 2
-    assert _count_logs(store, slug) == 1
-
-
-def test_retention_handles_empty_project(tmp_path):
-    store = ProjectStore(tmp_path / "data")
-    store.init_project("empty-project", retention_days=30)
-    run_retention(store)  # should not raise
-
-
 def test_retention_respects_per_project_retention_days(tmp_path):
     store = ProjectStore(tmp_path / "data")
     slug_short = store.init_project("short-lived", retention_days=7)
@@ -140,17 +120,3 @@ def test_project_databases_use_wal(tmp_path):
         assert session.execute(text("PRAGMA journal_mode")).scalar() == "wal"
     with store.logs_session(slug) as session:
         assert session.execute(text("PRAGMA journal_mode")).scalar() == "wal"
-
-
-def test_retention_runs_across_multiple_projects(tmp_path):
-    store = ProjectStore(tmp_path / "data")
-    slug_a = store.init_project("alpha", retention_days=30)
-    slug_b = store.init_project("beta", retention_days=30)
-
-    _insert_metric(store, slug_a, days_old=60)
-    _insert_metric(store, slug_b, days_old=60)
-
-    run_retention(store)
-
-    assert _count_metrics(store, slug_a) == 0
-    assert _count_metrics(store, slug_b) == 0

@@ -24,3 +24,19 @@ def flask_app(store):
 def client(flask_app):
     """Flask test client."""
     return flask_app.test_client()
+
+
+@pytest.fixture
+def posts(monkeypatch):
+    """Capture client-side HTTP POSTs as (url, json) instead of sending them."""
+    sent: list[tuple[str, dict]] = []
+
+    class _Response:
+        status_code = 201
+
+    def _fake_post(self, url, json=None, timeout=None):
+        sent.append((url, json))
+        return _Response()
+
+    monkeypatch.setattr("requests.Session.post", _fake_post)
+    return sent

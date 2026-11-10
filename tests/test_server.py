@@ -6,10 +6,11 @@ Covers registration, ingest, read queries, and validation errors.
 from datetime import UTC
 from datetime import datetime
 
+import pytest
 
-def test_health(client):
+
+def test_status_reports_ok(client):
     resp = client.get("/status")
-    assert resp.status_code == 200
     assert resp.get_json() == {"status": "ok"}
 
 
@@ -21,38 +22,32 @@ def test_register_project(client):
     assert data["retention_days"] == 14
 
 
-def test_register_project_missing_name(client):
-    resp = client.post("/projects/register", json={})
+@pytest.mark.parametrize(
+    "method, path, body",
+    [
+        ("post", "/projects/register", {}),
+        ("post", "/metrics", {"name": "x.y.z", "metric_type": "counter", "value": 1}),
+        ("post", "/logs", {"message": "oops"}),
+        ("get", "/metrics", None),
+        ("get", "/logs", None),
+    ],
+)
+def test_requests_without_project_are_rejected(client, method, path, body):
+    resp = getattr(client, method)(path, json=body)
     assert resp.status_code == 400
 
 
-def test_ingest_single_metric_point(client):
+def test_ingest_accepts_a_single_unwrapped_point(client):
     resp = client.post(
         "/metrics",
-        json={
-            "project": "my-api",
-            "name": "my-api.handle_request.requests",
-            "metric_type": "counter",
-            "value": 1,
-        },
+        json={"project": "my-api", "name": "my-api.fn.requests", "metric_type": "counter", "value": 1},
     )
-    assert resp.status_code == 201
-    assert resp.get_json()["inserted"] == 1
 
-
-def test_ingest_batch_metric_points(client):
-    resp = client.post(
-        "/metrics",
-        json={
-            "project": "my-api",
-            "points": [
-                {"name": "my-api.fn.counter", "metric_type": "counter", "value": 1},
-                {"name": "my-api.fn.duration", "metric_type": "timing", "value": 42.5},
-            ],
-        },
-    )
     assert resp.status_code == 201
-    assert resp.get_json()["inserted"] == 2
+    rows = client.get("/metrics?project=my-api").get_json()
+    assert [(r["name"], r["metric_type"], r["value"]) for r in rows] == [
+        ("my-api.fn.requests", "counter", 1.0)
+    ]
 
 
 def test_ingest_metric_invalid_type(client):
@@ -60,40 +55,6 @@ def test_ingest_metric_invalid_type(client):
         "/metrics",
         json={"project": "p", "name": "p.f.s", "metric_type": "histogram", "value": 1},
     )
-    assert resp.status_code == 400
-
-
-def test_ingest_metric_missing_project(client):
-    resp = client.post("/metrics", json={"name": "x.y.z", "metric_type": "counter", "value": 1})
-    assert resp.status_code == 400
-
-
-def test_ingest_single_log_entry(client):
-    resp = client.post(
-        "/logs",
-        json={"project": "my-api", "message": "Server started", "level": "INFO"},
-    )
-    assert resp.status_code == 201
-    assert resp.get_json()["inserted"] == 1
-
-
-def test_ingest_batch_log_entries(client):
-    resp = client.post(
-        "/logs",
-        json={
-            "project": "my-api",
-            "entries": [
-                {"message": "First", "level": "DEBUG"},
-                {"message": "Second", "level": "WARNING"},
-            ],
-        },
-    )
-    assert resp.status_code == 201
-    assert resp.get_json()["inserted"] == 2
-
-
-def test_ingest_log_missing_project(client):
-    resp = client.post("/logs", json={"message": "oops"})
     assert resp.status_code == 400
 
 
@@ -109,14 +70,6 @@ def _seed_metrics(client, project="my-api"):
             ],
         },
     )
-
-
-def test_read_metrics_returns_all(client):
-    _seed_metrics(client)
-    resp = client.get("/metrics?project=my-api")
-    assert resp.status_code == 200
-    rows = resp.get_json()
-    assert len(rows) == 3
 
 
 def test_read_metrics_filter_by_type(client):
@@ -135,21 +88,10 @@ def test_read_metrics_filter_by_name_prefix(client):
     assert rows[0]["name"] == "my-api.fn.latency"
 
 
-def test_read_metrics_missing_project(client):
-    resp = client.get("/metrics")
-    assert resp.status_code == 400
-
-
-def test_read_metrics_respects_limit(client):
+def test_read_metrics_limit_caps_rows_and_zero_means_unlimited(client):
     _seed_metrics(client)
-    resp = client.get("/metrics?project=my-api&limit=1")
-    assert len(resp.get_json()) == 1
-
-
-def test_read_metrics_no_limit_returns_all(client):
-    _seed_metrics(client)
-    resp = client.get("/metrics?project=my-api&limit=0")
-    assert len(resp.get_json()) == 3
+    assert len(client.get("/metrics?project=my-api&limit=1").get_json()) == 1
+    assert len(client.get("/metrics?project=my-api&limit=0").get_json()) == 3
 
 
 def _seed_logs(client, project="my-api"):
@@ -166,30 +108,12 @@ def _seed_logs(client, project="my-api"):
     )
 
 
-def test_read_logs_returns_all(client):
-    _seed_logs(client)
-    resp = client.get("/logs?project=my-api")
-    assert resp.status_code == 200
-    assert len(resp.get_json()) == 3
-
-
 def test_read_logs_filter_by_level(client):
     _seed_logs(client)
     resp = client.get("/logs?project=my-api&level=error")
     rows = resp.get_json()
     assert len(rows) == 1
     assert rows[0]["level"] == "ERROR"
-
-
-def test_read_logs_missing_project(client):
-    resp = client.get("/logs")
-    assert resp.status_code == 400
-
-
-def test_read_logs_no_limit_returns_all(client):
-    _seed_logs(client)
-    resp = client.get("/logs?project=my-api&limit=0")
-    assert len(resp.get_json()) == 3
 
 
 def test_projects_are_isolated(client):

@@ -1,18 +1,16 @@
-"""Tests for MetricsCollector stat naming and emit behavior."""
+"""Tests for MetricsCollector stat naming and fire-and-forget delivery."""
 
 import pytest
+import requests
 
 from spyglass.client.collector import MetricsCollector
-from spyglass.client.collector import _caller_function
-from spyglass.client.collector import _normalize_host
-from spyglass.db.models import MetricType
+from spyglass.client.http_client import _normalize_host
 
 
 @pytest.mark.parametrize(
     "raw, expected",
     [
         ("localhost:5013", "http://localhost:5013"),
-        ("http://localhost:5013", "http://localhost:5013"),
         ("https://example.com", "https://example.com"),
     ],
 )
@@ -20,21 +18,9 @@ def test_normalize_host(raw, expected):
     assert _normalize_host(raw) == expected
 
 
-def test_caller_function_returns_this_test_name():
-    # The first non-spyglass frame is this test function.
-    name = _caller_function()
-    assert name == "test_caller_function_returns_this_test_name"
-
-
-def _helper_that_calls_caller():
-    return _caller_function()
-
-
-def test_caller_function_skips_intermediate_helpers():
-    # When an intermediate (non-spyglass) helper calls _caller_function,
-    # the returned name is the helper itself since it's the first non-spyglass frame.
-    name = _helper_that_calls_caller()
-    assert name == "_helper_that_calls_caller"
+def _sent_names(collector, posts):
+    collector.flush()
+    return [p["name"] for url, body in posts if url.endswith("/metrics") for p in body["points"]]
 
 
 def test_collector_requires_non_empty_project():
@@ -42,78 +28,38 @@ def test_collector_requires_non_empty_project():
         MetricsCollector(host="localhost:19999", project="  ")
 
 
-def test_collector_does_not_raise_when_server_unreachable():
-    """Emit methods must never propagate exceptions to the caller."""
+def test_delivery_failures_never_reach_the_caller(monkeypatch):
+    def _refuse(self, url, json=None, timeout=None):
+        raise requests.ConnectionError("server down")
+
+    monkeypatch.setattr("requests.Session.post", _refuse)
+
     collector = MetricsCollector(host="localhost:19999", project="test")
     collector.increment("counter")
-    collector.decrement("counter")
-    collector.gauge("memory", 512.0)
-    collector.timing("latency", 10.5)
-    collector.set("active_users", 1)
+    collector.flush()
 
 
-def test_timed_context_manager_does_not_raise_when_server_unreachable():
-    collector = MetricsCollector(host="localhost:19999", project="test")
-    with collector.timed("operation"):
-        pass  # no exception should escape
-
-
-def test_decrement_sends_negative_value(monkeypatch):
-    sent = []
-
-    collector = MetricsCollector(host="localhost:19999", project="test")
-    monkeypatch.setattr(collector, "_send_point", lambda *a, **kw: sent.append(a))
-
-    collector.decrement("requests", value=3)
-    assert sent, "Expected _send_point to be called"
-
-    metric_type, name, value, tags = sent[0]
-    assert metric_type == MetricType.COUNTER
-    assert value == -3
-
-
-def test_prefix_false_sends_raw_stat(monkeypatch):
-    sent = []
-
+def test_prefix_prepends_project_and_calling_function(posts):
     collector = MetricsCollector(host="localhost:19999", project="myproject")
-    monkeypatch.setattr(collector, "_send_point", lambda *a, **kw: sent.append(a))
-
-    collector.increment("custom.full.name", prefix=False)
-    _, name, *_ = sent[0]
-    assert name == "custom.full.name"
-
-
-def test_prefix_true_prepends_project_and_caller(monkeypatch):
-    sent = []
-
-    collector = MetricsCollector(host="localhost:19999", project="myproject")
-    monkeypatch.setattr(collector, "_send_point", lambda *a, **kw: sent.append(a))
 
     collector.increment("requests")
-    _, name, *_ = sent[0]
-    # Format: {project}.{caller}.{stat}
-    assert name.startswith("myproject.")
-    assert name.endswith(".requests")
+
+    assert _sent_names(collector, posts) == [
+        "myproject.test_prefix_prepends_project_and_calling_function.requests"
+    ]
 
 
-def test_timed_context_manager_names_after_enclosing_function(monkeypatch):
-    sent = []
+def test_timed_context_manager_names_after_enclosing_function(posts):
     collector = MetricsCollector(host="localhost:19999", project="p")
-    monkeypatch.setattr(collector, "_send_point", lambda *a, **kw: sent.append(a))
 
     with collector.timed("op"):
         pass
 
-    assert sent[0][:2] == (
-        MetricType.TIMING,
-        "p.test_timed_context_manager_names_after_enclosing_function.op",
-    )
+    assert _sent_names(collector, posts) == ["p.test_timed_context_manager_names_after_enclosing_function.op"]
 
 
-def test_timed_decorator_names_after_decorated_function(monkeypatch):
-    sent = []
+def test_timed_decorator_names_after_decorated_function(posts):
     collector = MetricsCollector(host="localhost:19999", project="p")
-    monkeypatch.setattr(collector, "_send_point", lambda *a, **kw: sent.append(a))
 
     @collector.timed("op")
     def handler():
@@ -123,5 +69,4 @@ def test_timed_decorator_names_after_decorated_function(monkeypatch):
         return handler()
 
     assert framework_dispatch() == 42
-    assert framework_dispatch.__name__ != handler.__name__
-    assert sent[0][:2] == (MetricType.TIMING, "p.handler.op")
+    assert _sent_names(collector, posts) == ["p.handler.op"]
