@@ -3,10 +3,14 @@
 Covers registration, ingest, read queries, and validation errors.
 """
 
+import logging
 from datetime import UTC
 from datetime import datetime
 
 import pytest
+
+from spyglass.client.collector import MetricsCollector
+from spyglass.client.logging import SpyglassHandler
 
 
 def test_status_reports_ok(client):
@@ -106,6 +110,33 @@ def _seed_logs(client, project="my-api"):
             ],
         },
     )
+
+
+def test_read_logs_limit_caps_rows_and_zero_means_unlimited(client):
+    _seed_logs(client)
+    assert len(client.get("/logs?project=my-api&limit=1").get_json()) == 1
+    assert len(client.get("/logs?project=my-api&limit=0").get_json()) == 3
+
+
+def test_server_accepts_what_the_client_sends(client, posts):
+    collector = MetricsCollector(host="localhost:19999", project="wire")
+    collector.increment("hits", tags={"route": "/a"})
+    collector.gauge("depth", 3)
+    collector.timing("latency", 5.0)
+    collector.set("users", 1)
+    collector.flush()
+    handler = SpyglassHandler(host="localhost:19999", project="wire")
+    handler.emit(logging.LogRecord("app", logging.WARNING, __file__, 1, "hello", None, None))
+    handler.flush()
+
+    paths = [url.removeprefix("http://localhost:19999") for url, _ in posts]
+    assert {"/metrics", "/logs"} <= set(paths)
+    for path, (_, body) in zip(paths, posts, strict=True):
+        expected = 200 if path == "/projects/register" else 201
+        assert client.post(path, json=body).status_code == expected, path
+
+    assert len(client.get("/metrics?project=wire").get_json()) == 4
+    assert len(client.get("/logs?project=wire").get_json()) == 1
 
 
 def test_read_logs_filter_by_level(client):

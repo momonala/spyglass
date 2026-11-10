@@ -3,6 +3,7 @@
 import typer
 from typer.testing import CliRunner
 
+from spyglass._config import CONFIG
 from spyglass.config import config_cli
 
 app = typer.Typer()
@@ -16,6 +17,13 @@ def test_config_returns_single_value():
 
     assert result.exit_code == 0
     assert result.stdout.strip() == "spyglass"
+
+
+def test_config_flask_port_prints_configured_port():
+    result = runner.invoke(app, ["--flask-port"])
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "5013" == str(CONFIG.port)
 
 
 def test_config_all_returns_all_values():
