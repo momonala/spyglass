@@ -26,6 +26,12 @@ def test_register_project(client):
     assert data["retention_days"] == 14
 
 
+@pytest.mark.parametrize("retention_days", [0, 3651, "forever"])
+def test_register_rejects_invalid_retention(client, retention_days):
+    resp = client.post("/projects/register", json={"project": "my-api", "retention_days": retention_days})
+    assert resp.status_code == 400
+
+
 @pytest.mark.parametrize(
     "method, path, body",
     [

@@ -114,9 +114,10 @@ def _parse_bins() -> int:
     if not raw_bins:
         return DEFAULT_HISTOGRAM_BINS
     try:
-        return int(raw_bins)
+        bins = int(raw_bins)
     except ValueError:
         abort(400, "bins must be an integer")
+    return max(1, min(bins, 200))
 
 
 def _list_project_templates() -> list[str]:

@@ -54,7 +54,12 @@ def register_project() -> tuple[Response, int]:
     if not project:
         return jsonify({"error": "project is required"}), 400
 
-    retention_days = int(data.get("retention_days", DEFAULT_RETENTION_DAYS))
+    try:
+        retention_days = int(data.get("retention_days", DEFAULT_RETENTION_DAYS))
+    except (TypeError, ValueError):
+        return jsonify({"error": "retention_days must be an integer"}), 400
+    if not 1 <= retention_days <= 3650:
+        return jsonify({"error": "retention_days must be between 1 and 3650"}), 400
     try:
         slug = _store().init_project(project, retention_days)
     except ValueError as exc:

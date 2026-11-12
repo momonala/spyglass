@@ -18,7 +18,7 @@ dependencies = [
 
 [tool.config]
 data_dir = "data"
-host = "0.0.0.0"
+host = "127.0.0.1"
 port = 5013
 retention_days = 30
 write_flush_interval_s = 600

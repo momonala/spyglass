@@ -25,7 +25,7 @@ Non-secret settings live in `pyproject.toml` under `[tool.config]`, loaded by `s
 ```toml
 [tool.config]
 data_dir = "data"       # root for per-project DB directories
-host = "0.0.0.0"
+host = "127.0.0.1"
 port = 5013
 retention_days = 30     # default; overridable per project at registration
 ```

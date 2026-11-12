@@ -11,7 +11,7 @@ _PYPROJECT = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
 @dataclass(frozen=True)
 class SpyglassConfig:
     data_dir: str = "data"
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 5013
     retention_days: int = 30
     write_flush_interval_s: float = 600
